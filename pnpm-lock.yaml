@@ -17,6 +17,9 @@ importers:
       dotenv:
         specifier: ^17.2.0
         version: 17.2.0
+      openai:
+        specifier: ^5.9.0
+        version: 5.9.0(ws@8.18.3)(zod@3.25.76)
       telegraf:
         specifier: ^4.16.3
         version: 4.16.3

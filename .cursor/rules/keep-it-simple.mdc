@@ -1,0 +1,20 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+**Build Small, Grow On Demand**
+
+*We write code the same way we eat an apple — one bite at a time.*
+
+* **Start with the thinnest slice that works.**
+  Create the minimal file/function to satisfy the current task; no extra layers, no “just-in-case” helpers.
+
+* **Add structure only when duplication hurts.**
+  Feel the pain twice before introducing a new abstraction.
+
+* **Every PR should be runnable end-to-end.**
+  Even early scaffolding must compile, lint, and pass tests.
+
+* **Delete as eagerly as you add.**
+  Dead code is worse than no code.

@@ -1,0 +1,46 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+1. **Never hard-code secrets**
+
+   * Keep `OPENAI_API_KEY`, `SUPABASE_*`, `BOT_TOKEN` in `.env.local` (git-ignored).
+   * Use Cursor “secret snippets” when sharing code in chat.
+
+2. **`pnpm` only**
+
+   * Scripts go in `package.json` (`pnpm dev`, `pnpm lint`, …).
+   * Avoid ad-hoc terminal commands that break reproducibility.
+
+3. **Partial Diff & Prettier**
+
+   * Stage only the lines you changed.
+   * Auto-format on save; no mixed tabs/spaces.
+
+4. **Type-safety is non-negotiable**
+
+   * Fix every red squiggle before commit (`tsc --noEmit`).
+   * Run `pnpm supabase:gen` after DB schema changes to refresh generated types.
+
+5. **Secrets in logs? → stop**
+
+   * Scrub console output before pushing.
+   * Remove debug `console.log` statements via Partial Diff.
+
+6. **Cursor Chat prompts**
+
+   * `//!` → generate/insert code.
+   * `///?` → ask for explanation only.
+
+7. **CI must be green**
+
+   * Cursor’s built-in CI shows lint, type-check, tests.
+   * Red ✗ = fix immediately, don’t push “will fix later”.
+
+8. **Module isolation**
+
+   * One responsibility per file.
+   * No circular imports; use dependency injection where modules interact.
+
+---

@@ -10,6 +10,7 @@ export const messageTypeEnum = pgEnum('message_type', ['text', 'voice', 'documen
 export const fileTypeEnum = pgEnum('file_type', ['text', 'voice', 'document', 'photo', 'video', 'audio']);
 export const processingStatusEnum = pgEnum('processing_status', ['pending', 'processing', 'completed', 'failed']);
 export const recurrenceTypeEnum = pgEnum('recurrence_type', ['none', 'daily', 'weekly', 'monthly', 'yearly']);
+export const messageRoleEnum = pgEnum('message_role', ['user', 'assistant']);
 
 // === CORE TABLES ===
 export const projects = pgTable('projects', {
@@ -71,18 +72,21 @@ export const messages = pgTable('messages', {
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   channelId: uuid('channel_id').references(() => channels.id, { onDelete: 'cascade' }),
-  
+
+  // Role in the conversation (user / assistant)
+  role: messageRoleEnum('role').default('user'),
+
   // Message content
   messageType: messageTypeEnum('message_type').notNull(),
   content: text('content').notNull(), // Main text content
-  
+
   // Gateway-specific data
   gatewayType: gatewayTypeEnum('gateway_type').notNull(),
   gatewayMessageId: text('gateway_message_id').notNull(), // Platform-specific message ID
-  
+
   // File attachment (optional)
   fileId: uuid('file_id').references(() => files.id, { onDelete: 'set null' }),
-  
+
   // Processing metadata (flexible JSON)
   processingMetadata: jsonb('processing_metadata').$type<{
     processor?: string;
@@ -94,14 +98,14 @@ export const messages = pgTable('messages', {
     contentType?: string;
     [key: string]: any;
   }>(),
-  
+
   // Status tracking
   processingStatus: processingStatusEnum('processing_status').default('completed'),
-  
+
   // Thread/reply support
   parentMessageId: uuid('parent_message_id'), // Self-reference to messages.id
   threadId: uuid('thread_id'), // For grouping related messages
-  
+
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -114,18 +118,18 @@ export const reminders = pgTable('reminders', {
   messageId: uuid('message_id').references(() => messages.id, { onDelete: 'cascade' }), // Source message
   content: text('content').notNull(),
   scheduledFor: timestamp('scheduled_for').notNull(),
-  
+
   // Semantic search support
   embedding: vector('embedding', { dimensions: 1536 }), // For semantic search
   tags: text('tags').array(), // For categorization ["birthday", "friend", "fettah"]
   summary: text('summary'), // Brief description for better search
-  
+
   // Recurrence support
   recurrenceType: recurrenceTypeEnum('recurrence_type').default('none'),
   recurrenceInterval: integer('recurrence_interval').default(1), // Every N intervals (e.g., every 2 weeks)
   recurrenceEndDate: timestamp('recurrence_end_date'), // When to stop creating recurring instances
   isRecurring: boolean('is_recurring').default(false),
-  
+
   // Status tracking
   isCompleted: boolean('is_completed').default(false),
   completedAt: timestamp('completed_at'),
@@ -137,19 +141,19 @@ export const memories = pgTable('memories', {
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   messageId: uuid('message_id').references(() => messages.id, { onDelete: 'cascade' }), // Source message
-  
+
   // Content data
   content: text('content').notNull(),
   summary: text('summary'),
   embedding: vector('embedding', { dimensions: 1536 }),
-  
+
   // File reference
   fileId: uuid('file_id').references(() => files.id, { onDelete: 'set null' }),
-  
+
   // Metadata
   metadata: jsonb('metadata').$type<Record<string, any>>(),
   tags: text('tags').array(), // For categorization
-  
+
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -159,16 +163,16 @@ export const facts = pgTable('facts', {
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   messageId: uuid('message_id').references(() => messages.id, { onDelete: 'cascade' }), // Source message
-  
+
   keyText: text('key_text').notNull(),
   valueText: text('value_text').notNull(),
   embedding: vector('embedding', { dimensions: 1536 }),
   confidence: real('confidence').default(1.0),
-  
+
   // For fact updates/versioning
   previousFactId: uuid('previous_fact_id'), // Self-reference to facts.id
   isActive: boolean('is_active').default(true),
-  
+
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });

@@ -2,18 +2,27 @@ import type { Context } from 'telegraf';
 import { ResponseFormatter } from './response-formatter.js';
 import { MessageProcessingService } from '../services/message-processing.service.js';
 import type { MessageProcessor, MessageExtractor } from './types.js';
-import type { ProcessedMessage, UserContext } from '../types/index.js';
+import type { DatabaseContext, ProcessedMessage, UserContext } from '../types/index.js';
+import type { MessageProcessingResult } from '../types/index.js';
+import { MainAgentService } from '../agent/main-agent.service.js';
+
+type MessageRouterResult = {
+  reply: string;
+  context?: DatabaseContext;
+}
 
 export class MessageRouter {
   private processors: Map<string, MessageProcessor> = new Map();
   private messageExtractor: MessageExtractor | null = null;
   private responseFormatter: ResponseFormatter;
   private messageProcessingService: MessageProcessingService;
+  private mainAgentService: MainAgentService;
 
   constructor(extractor?: MessageExtractor) {
     this.messageExtractor = extractor || null;
     this.responseFormatter = new ResponseFormatter();
     this.messageProcessingService = new MessageProcessingService();
+    this.mainAgentService = new MainAgentService();
   }
 
   setExtractor(extractor: MessageExtractor) {
@@ -32,7 +41,10 @@ export class MessageRouter {
     return this.messageExtractor;
   }
 
-  async routeMessage(ctx: Context, messageType: string): Promise<string> {
+  async routeMessage(
+    ctx: Context,
+    messageType: string
+  ): Promise<MessageRouterResult> {
     const processor = this.processors.get(messageType);
     
     let processedMessage: ProcessedMessage;
@@ -59,21 +71,44 @@ export class MessageRouter {
       gateway: processedMessage.gatewayType,
     });
 
-    // Save to database with processed content
-    await this.saveProcessedMessage(ctx, processedMessage);
+    // Save to database with processed content and get DB context
+    const processingResult = await this.saveProcessedMessage(ctx, processedMessage);
 
-    // Format response using modern formatter
-    return this.responseFormatter.formatResponse(processedMessage);
+    if (processedMessage.messageType === 'photo') {
+      const ack = await this.mainAgentService.generatePhotoAck(processedMessage);
+      return { reply: ack, context: processingResult.context };
+    }
+
+    // If saving succeeded, invoke the main agent with conversation context
+    if (processingResult.success) {
+      const replyText = await this.mainAgentService.generateReply(
+        processedMessage.content,
+        processingResult.context,
+        { limit: 10 }
+      );
+      return { reply: replyText, context: processingResult.context };
+    }
+
+    // Fallback: formatted response without agent involvement
+    return { reply: this.responseFormatter.formatResponse(processedMessage) };
   }
 
   /**
    * Save the processed message to database (with transcription, analysis etc.)
    */
-  private async saveProcessedMessage(ctx: Context, processedMessage: ProcessedMessage) {
+  private async saveProcessedMessage(
+    ctx: Context,
+    processedMessage: ProcessedMessage
+  ): Promise<MessageProcessingResult> {
     try {
       if (!this.messageExtractor) {
         console.error('No message extractor available for user context');
-        return;
+        return {
+          messageId: '',
+          context: { projectId: '', userId: '', channelId: '' },
+          success: false,
+          error: 'No message extractor available for user context',
+        };
       }
 
       // Extract user context
@@ -91,8 +126,16 @@ export class MessageRouter {
       } else {
         console.error(`❌ Failed to save processed message: ${result.error}`);
       }
+
+      return result;
     } catch (error) {
       console.error('Error saving processed message to database:', error);
+      return {
+        messageId: '',
+        context: { projectId: '', userId: '', channelId: '' },
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
     }
   }
 } 

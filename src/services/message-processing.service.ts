@@ -70,7 +70,7 @@ export class MessageProcessingService {
       };
 
       // Step 5: Save message to database
-      const messageId = await this.messageService.saveMessage(processedMessage, context);
+      const messageId = await this.messageService.saveMessage(processedMessage, context, 'user');
 
       // Step 6: Create memory for file-based content (photos, documents, audio files)
       if (this.shouldCreateMemory(processedMessage)) {

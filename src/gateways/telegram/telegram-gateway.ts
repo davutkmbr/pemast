@@ -5,6 +5,8 @@ import { BaseGateway, type GatewayConfig } from '../base-gateway.js';
 import { MessageRouter } from '../message-router.js';
 import { TelegramExtractor } from './telegram-extractor.js';
 import type { MessageProcessor } from '../types.js';
+import { MessageService } from '../../services/message.service.js';
+import { DatabaseContext, ProcessedMessage } from '../../types/index.js';
 
 export class TelegramGateway extends BaseGateway {
   private bot: Telegraf;
@@ -79,10 +81,21 @@ export class TelegramGateway extends BaseGateway {
       ctx.sendChatAction('typing');
       
       // Process message and save to database (single flow)
-      const response = await this.messageRouter.routeMessage(ctx, messageType);
-      
-      // Send response to user
-      await this.sendMessage(ctx, response);
+      const result = await this.messageRouter.routeMessage(ctx, messageType);
+
+      if (!result) {
+        return;
+      }
+
+      const { reply, context } = result;
+
+      // Send response to user and get Telegram message info
+      const sent = await this.sendMessage(ctx, result.reply);
+
+      // Persist assistant message if we have DB context and Telegram sent
+      if (context && sent && typeof sent.message_id !== 'undefined') {
+        await this.saveAssistantMessage(sent.message_id, reply, context);
+      }
       
     } catch (error) {
       console.error('Error handling message:', error);
@@ -95,13 +108,16 @@ export class TelegramGateway extends BaseGateway {
       // Split long messages if needed
       const maxLength = 4096; // Telegram's message limit
       if (message.length <= maxLength) {
-        await ctx.reply(message);
+        return await ctx.reply(message);
       } else {
         // Split into chunks
         const chunks = this.splitMessage(message, maxLength);
+        let firstMessage: any = null;
         for (const chunk of chunks) {
-          await ctx.reply(chunk);
+          const m = await ctx.reply(chunk);
+          if (!firstMessage) firstMessage = m;
         }
+        return firstMessage;
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -138,6 +154,31 @@ export class TelegramGateway extends BaseGateway {
     }
     
     return chunks;
+  }
+
+  /**
+   * Save assistant reply to database
+   */
+  private async saveAssistantMessage(
+    telegramMessageId: number,
+    content: string,
+    context: DatabaseContext
+  ) {
+    try {
+      const messageService = new MessageService();
+      const processed: ProcessedMessage = {
+        content,
+        messageType: 'text',
+        gatewayType: 'telegram',
+        gatewayMessageId: telegramMessageId.toString(),
+        timestamp: new Date(),
+      };
+
+      await messageService.saveMessage(processed, context, 'assistant');
+      console.log('💾 Assistant message saved');
+    } catch (err) {
+      console.error('Failed to save assistant message:', err);
+    }
   }
 
   start() {

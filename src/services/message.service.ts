@@ -19,8 +19,9 @@ export class MessageService {
    * File creation is handled by processors, we just use the fileId from metadata
    */
   async saveMessage(
-    processedMessage: ProcessedMessage, 
-    context: DatabaseContext
+    processedMessage: ProcessedMessage,
+    context: DatabaseContext,
+    role: 'user' | 'assistant' = 'user'
   ): Promise<string> {
     try {
       // Get fileId from processor metadata (processors handle file creation)
@@ -35,6 +36,7 @@ export class MessageService {
         projectId: context.projectId,
         userId: context.userId,
         channelId: context.channelId,
+        role,
         messageType: processedMessage.messageType,
         content: processedMessage.content,
         gatewayType: processedMessage.gatewayType,

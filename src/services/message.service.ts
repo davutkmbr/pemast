@@ -19,7 +19,7 @@ export class MessageService {
    * File creation is handled by processors, we just use the fileId from metadata
    */
   async saveMessage(
-    processedMessage: ProcessedMessage,
+    processedMessage: ProcessedMessage, 
     context: DatabaseContext,
     role: 'user' | 'assistant' = 'user'
   ): Promise<string> {

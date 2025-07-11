@@ -2,6 +2,7 @@ import { eq, and, lte, gt, or, ilike, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { reminders } from '../db/schema.js';
 import { embeddingService } from './embedding.service.js';
+import { vectorSearch } from '../utils/vector-search.js';
 import type { 
   CreateReminderInput, 
   DatabaseContext, 
@@ -278,16 +279,37 @@ export class ReminderService {
           })));
       }
 
-      // For now, return empty results until OpenAI embedding integration is complete
-      // TODO: Implement actual vector search when embeddings are working
-      console.log('Vector search not yet implemented - falling back to text search');
-      const textResults = await this.searchRemindersByText(query, userId, projectId, limit);
-      
-      return textResults.map(item => ({
-        item,
-        similarity: 0.8, // Mock similarity score
-        distance: 0.2
-      }));
+      // Use generic vector search helper
+      const vectorResults = await vectorSearch<Reminder>({
+        table: reminders,
+        embeddingColumn: reminders.embedding,
+        selectColumns: {
+          id: reminders.id,
+          projectId: reminders.projectId,
+          userId: reminders.userId,
+          messageId: reminders.messageId,
+          content: reminders.content,
+          summary: reminders.summary,
+          embedding: reminders.embedding,
+          tags: reminders.tags,
+          scheduledFor: reminders.scheduledFor,
+          recurrenceType: reminders.recurrenceType,
+          recurrenceInterval: reminders.recurrenceInterval,
+          recurrenceEndDate: reminders.recurrenceEndDate,
+          isRecurring: reminders.isRecurring,
+          isCompleted: reminders.isCompleted,
+          createdAt: reminders.createdAt,
+        },
+        where: [
+          eq(reminders.userId, userId),
+          eq(reminders.projectId, projectId),
+          eq(reminders.isCompleted, false),
+        ],
+        queryEmbedding,
+        limit,
+      });
+
+      return vectorResults;
 
     } catch (error) {
       console.error('Error in semantic reminder search:', error);

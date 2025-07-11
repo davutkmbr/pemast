@@ -4,11 +4,13 @@ import type {
   MessageType, 
   ProcessingStatus, 
   FileType,
+  RecurrenceType,
+  Reminder as DBReminder,
   MessageWithRelations as DBMessageWithRelations
 } from '../db/client.js';
 
 // Re-export database types as single source of truth
-export type { GatewayType, MessageType, ProcessingStatus, FileType };
+export type { GatewayType, MessageType, ProcessingStatus, FileType, RecurrenceType };
 
 // === Core Database Context ===
 export interface DatabaseContext {
@@ -122,6 +124,23 @@ export interface CreateMemoryInput {
   fileId?: string;
   metadata?: Record<string, any>;
   tags?: string[];
+}
+
+// === Reminder Types ===
+
+export type Reminder = DBReminder;
+
+export interface CreateReminderInput {
+  messageId: string;
+  content: string;
+  summary?: string;
+  scheduledFor: Date;
+  tags?: string[];
+  recurrence?: {
+    type: RecurrenceType;
+    interval?: number;
+    endDate?: Date;
+  };
 }
 
 export interface VectorSearchResult<T> {

@@ -82,6 +82,7 @@ export class MessageRouter {
     // If saving succeeded, invoke the main agent with conversation context
     if (processingResult.success) {
       const replyText = await this.mainAgentService.generateReply(
+        ctx,
         processedMessage.content,
         processingResult.context,
         { limit: 10 }

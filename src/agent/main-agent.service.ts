@@ -1,7 +1,12 @@
-import { run, user as userMessage, assistant as assistantMessage, system as systemMessage } from "@openai/agents";
+import { run, user as userMessage, assistant as assistantMessage, system as systemMessage, RunToolCallItem } from "@openai/agents";
 import { mainAgent } from "./main-agent.js";
 import { MessageService } from "../services/message.service.js";
 import type { DatabaseContext, ProcessedMessage } from "../types/index.js";
+import { Context } from "telegraf";
+import { AgentRunner } from "./agent-runner.js";
+import { TelegramStreamUI } from "../gateways/telegram/telegram-stream-ui.js";
+import { BaseGateway } from "../gateways/base-gateway.js";
+import { TelegramGateway } from "../gateways/index.js";
 
 export class MainAgentService {
   private messageService: MessageService;
@@ -22,6 +27,7 @@ export class MainAgentService {
    * this method to include them as `assistant` role items.
    */
   async generateReply(
+    ctx: Context,
     newMessageContent: string,
     context: DatabaseContext,
     options: { limit?: number } = {}
@@ -46,20 +52,10 @@ export class MainAgentService {
     // Append the freshly received message.
     inputItems.push(userMessage(newMessageContent));
 
-    // Run the agent and return its final output text.
-    const result = await run(mainAgent, inputItems);
-    const output = result.finalOutput;
+    const agentRunner = new AgentRunner(mainAgent, new TelegramStreamUI(ctx));
+    const result = await agentRunner.run(inputItems, context);
 
-    if (typeof output === "string") {
-      return output;
-    }
-
-    if (output === undefined || output === null) {
-      return ""; // avoid returning undefined
-    }
-
-    // If agent output is structured (JSON/Zod) stringify for now.
-    return JSON.stringify(output);
+    return result?.finalOutput || '';
   }
 
   /** Create a friendly acknowledgement for a processed photo */

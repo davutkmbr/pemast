@@ -2,6 +2,7 @@ import { eq, and, desc, or, ilike, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { memories } from '../db/schema.js';
 import { embeddingService } from './embedding.service.js';
+import { vectorSearch } from '../utils/vector-search.js';
 import type { 
   CreateMemoryInput, 
   DatabaseContext, 
@@ -140,16 +141,33 @@ export class MemoryService {
           })));
       }
 
-      // For now, return empty results until OpenAI embedding integration is complete
-      // TODO: Implement actual vector search when embeddings are working
-      console.log('Vector search not yet implemented - falling back to text search');
-      const textResults = await this.searchMemoriesByText(query, userId, projectId, limit);
-      
-      return textResults.map(item => ({
-        item,
-        similarity: 0.8, // Mock similarity score
-        distance: 0.2
-      }));
+      // Use generic vector search helper
+      const vectorResults = await vectorSearch<Memory>({
+        table: memories,
+        embeddingColumn: memories.embedding,
+        selectColumns: {
+          id: memories.id,
+          projectId: memories.projectId,
+          userId: memories.userId,
+          messageId: memories.messageId,
+          content: memories.content,
+          summary: memories.summary,
+          embedding: memories.embedding,
+          fileId: memories.fileId,
+          metadata: memories.metadata,
+          tags: memories.tags,
+          createdAt: memories.createdAt,
+          updatedAt: memories.updatedAt,
+        },
+        where: [
+          eq(memories.userId, userId),
+          eq(memories.projectId, projectId),
+        ],
+        queryEmbedding,
+        limit,
+      });
+
+      return vectorResults;
 
     } catch (error) {
       console.error('Error in semantic memory search:', error);
@@ -318,7 +336,7 @@ export class MemoryService {
       
       // Add semantic results (highest priority)
       results.semantic.forEach(result => {
-        if (result.similarity > 0.7) { // Only high-confidence semantic matches
+        if (result.similarity > 0.3) { // Only high-confidence semantic matches
           allMemories.set(result.item.id, result.item);
         }
       });
@@ -345,7 +363,8 @@ export class MemoryService {
         semantic: results.semantic.length,
         text: results.text.length,
         tags: results.tags.length,
-        combined: results.combined.length
+        combined: results.combined.length,
+        memoryTexts: Array.from(allMemories.values()).map(m => m.content)
       });
 
       return results;

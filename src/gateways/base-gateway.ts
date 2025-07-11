@@ -1,4 +1,5 @@
 import type { MessageProcessor } from './types.js';
+import type { Context } from 'telegraf';
 
 export interface GatewayConfig {
   token: string;
@@ -20,4 +21,9 @@ export abstract class BaseGateway {
   // Common gateway info
   abstract getGatewayType(): string;
   abstract getStatus(): 'starting' | 'running' | 'stopping' | 'stopped';
+  
+  /**
+   * Send a message to the gateway
+   */
+  abstract sendMessage(ctx: Context, message: string): Promise<void>;
 } 

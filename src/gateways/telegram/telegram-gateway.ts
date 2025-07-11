@@ -17,13 +17,13 @@ export class TelegramGateway extends BaseGateway {
   constructor(config: GatewayConfig) {
     super(config);
     this.bot = new Telegraf(config.token);
-    
+
     // Create Telegram-specific extractor
     this.telegramExtractor = new TelegramExtractor();
-    
+
     // Create message router with Telegram extractor
     this.messageRouter = new MessageRouter(this.telegramExtractor);
-    
+
     this.setupHandlers();
   }
 
@@ -72,14 +72,35 @@ export class TelegramGateway extends BaseGateway {
         '🎤 Voice messages - I\'ll transcribe them\n' +
         '📄 Documents - I\'ll analyze and summarize\n' +
         '📸 Photos - I\'ll describe and extract text\n\n' +
-        'Just send me any message and I\'ll help you!');
+        'Just send me any message and I\'ll help you!', { parse_mode: 'Markdown' });
     });
+  }
+
+  async sendMessage(ctx: Context, message: string) {
+    try {
+      // Split long messages if needed
+      const maxLength = 4096; // Telegram's message limit
+      if (message.length <= maxLength) {
+        return await ctx.reply(message, { parse_mode: 'Markdown' });
+      } else {
+        // Split into chunks
+        const chunks = this.splitMessage(message, maxLength);
+        let firstMessage: any = null;
+        for (const chunk of chunks) {
+          const m = await ctx.reply(chunk, { parse_mode: 'Markdown' });
+          if (!firstMessage) firstMessage = m;
+        }
+        return firstMessage;
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+    }
   }
 
   private async handleMessage(ctx: Context, messageType: string) {
     try {
       ctx.sendChatAction('typing');
-      
+
       // Process message and save to database (single flow)
       const result = await this.messageRouter.routeMessage(ctx, messageType);
 
@@ -96,47 +117,26 @@ export class TelegramGateway extends BaseGateway {
       if (context && sent && typeof sent.message_id !== 'undefined') {
         await this.saveAssistantMessage(sent.message_id, reply, context);
       }
-      
+
     } catch (error) {
       console.error('Error handling message:', error);
       await this.sendMessage(ctx, 'Sorry, I encountered an error processing your message.');
     }
   }
 
-  private async sendMessage(ctx: Context, message: string) {
-    try {
-      // Split long messages if needed
-      const maxLength = 4096; // Telegram's message limit
-      if (message.length <= maxLength) {
-        return await ctx.reply(message);
-      } else {
-        // Split into chunks
-        const chunks = this.splitMessage(message, maxLength);
-        let firstMessage: any = null;
-        for (const chunk of chunks) {
-          const m = await ctx.reply(chunk);
-          if (!firstMessage) firstMessage = m;
-        }
-        return firstMessage;
-      }
-    } catch (error) {
-      console.error('Error sending message:', error);
-    }
-  }
-
   private splitMessage(message: string, maxLength: number): string[] {
     const chunks: string[] = [];
     let currentChunk = '';
-    
+
     const lines = message.split('\n');
-    
+
     for (const line of lines) {
       if ((currentChunk + line + '\n').length > maxLength) {
         if (currentChunk) {
           chunks.push(currentChunk.trim());
           currentChunk = '';
         }
-        
+
         // If a single line is too long, split it
         if (line.length > maxLength) {
           const lineChunks = line.match(new RegExp(`.{1,${maxLength - 10}}`, 'g')) || [];
@@ -148,11 +148,11 @@ export class TelegramGateway extends BaseGateway {
         currentChunk += line + '\n';
       }
     }
-    
+
     if (currentChunk.trim()) {
       chunks.push(currentChunk.trim());
     }
-    
+
     return chunks;
   }
 
@@ -188,7 +188,7 @@ export class TelegramGateway extends BaseGateway {
     }
 
     this.status = 'starting';
-    
+
     this.bot.launch()
       .then(() => {
         this.status = 'running';
@@ -206,7 +206,7 @@ export class TelegramGateway extends BaseGateway {
     }
 
     this.status = 'stopping';
-    
+
     this.bot.stop('SIGTERM');
     this.status = 'stopped';
     console.log('🛑 Telegram gateway stopped');

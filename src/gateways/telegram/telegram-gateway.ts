@@ -73,6 +73,7 @@ export class TelegramGateway extends BaseGateway {
 
   private async handleMessage(ctx: Context, messageType: string) {
     try {
+      ctx.sendChatAction('typing')
       const response = await this.messageRouter.routeMessage(ctx, messageType);
       await this.sendMessage(ctx, response);
     } catch (error) {

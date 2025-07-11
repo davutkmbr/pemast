@@ -32,7 +32,76 @@ Built with **Node 18 + TypeScript**, **OpenAI Agents SDK**, and **Supabase** (Po
 
 ---
 
-## 2 · Message Processing Flow
+## 2 · OpenAI API Standards
+
+### **🎯 Structured Outputs Only**
+**All OpenAI API calls MUST use structured outputs with Zod schemas.**
+
+```typescript
+// ✅ CORRECT - Use structured outputs with Zod
+const ResponseSchema = z.object({
+  summary: z.string().describe('Concise summary of the content'),
+  keyPoints: z.array(z.string()).describe('Important points extracted'),
+  contentType: z.string().describe('Type of content analyzed'),
+});
+
+const response = await openai.chat.completions.create({
+  model: "gpt-4o-mini",
+  messages: [...],
+  response_format: {
+    type: "json_schema",
+    json_schema: {
+      name: "content_analysis",
+      strict: true,
+      schema: {
+        type: "object",
+        properties: {
+          summary: { type: "string", description: "Concise summary of the content" },
+          keyPoints: { 
+            type: "array", 
+            items: { type: "string" }, 
+            description: "Important points extracted" 
+          },
+          contentType: { type: "string", description: "Type of content analyzed" }
+        },
+        required: ["summary", "keyPoints", "contentType"],
+        additionalProperties: false
+      }
+    }
+  }
+});
+
+const parsed = ResponseSchema.parse(JSON.parse(response.choices[0].message.content));
+```
+
+```typescript
+// ❌ WRONG - Manual parsing, regex, or unstructured outputs
+const response = await openai.chat.completions.create({
+  model: "gpt-4o-mini",
+  messages: [{ role: "user", content: "Analyze this and return JSON" }],
+  // No response_format specified
+});
+
+// Manual parsing - error prone!
+const result = response.choices[0].message.content.match(/some regex/);
+```
+
+### **Why Structured Outputs?**
+- **100% Reliability**: Guaranteed valid JSON, no parsing errors
+- **Type Safety**: Zod validation ensures data integrity
+- **Better Performance**: No retry loops for malformed responses
+- **Cleaner Code**: No manual regex parsing or string manipulation
+- **RAG-Ready**: Consistent structured data for database storage
+
+### **Required Pattern**
+1. **Define Zod Schema** with clear descriptions
+2. **Use `response_format: json_schema`** with `strict: true`
+3. **Parse with Zod** for validation
+4. **Handle errors** gracefully with fallbacks
+
+---
+
+## 3 · Message Processing Flow
 
 ```
 Telegram Message
@@ -68,7 +137,7 @@ Telegram Message
 
 ---
 
-## 3 · Directory Layout (fully isolated modules)
+## 4 · Directory Layout (fully isolated modules)
 
 ```
 src/
@@ -119,7 +188,7 @@ src/
 
 ---
 
-## 4 · Message Processing Scenarios
+## 5 · Message Processing Scenarios
 
 ### 📝 Text Messages
 ```
@@ -153,7 +222,7 @@ Flow: Gateway → Transcript Processor → Agent → Store Memory Tool → Respo
 
 ---
 
-## 5 · Processor Modules (Isolated Components)
+## 6 · Processor Modules (Isolated Components)
 
 ### Transcript Processor (`src/processors/transcript.processor.ts`)
 - **Input**: Voice message file from Telegram
@@ -175,7 +244,7 @@ Flow: Gateway → Transcript Processor → Agent → Store Memory Tool → Respo
 
 ---
 
-## 6 · Database Schema (essential tables)
+## 7 · Database Schema (essential tables)
 
 ```sql
 -- Projects (personal or team)
@@ -246,7 +315,7 @@ create table facts (
 
 ---
 
-## 7 · Agent Tools (overview)
+## 8 · Agent Tools (overview)
 
 | Tool                 | Purpose                                                           | Calls                             |
 | -------------------- | ----------------------------------------------------------------- | --------------------------------- |
@@ -257,7 +326,7 @@ create table facts (
 
 ---
 
-## 8 · Installation
+## 9 · Installation
 
 ```bash
 pnpm i
@@ -280,7 +349,7 @@ SUPABASE_ANON_KEY=          # From Supabase Dashboard
 
 ---
 
-## 9 · Testing & CI
+## 10 · Testing & CI
 
 ```bash
 pnpm lint           # biome check
@@ -292,7 +361,7 @@ All three commands run in Cursor CI; zero red lines before merging.
 
 ---
 
-## 10 · Deployment
+## 11 · Deployment
 
 ```bash
 pnpm supabase:deploy        # pushes Edge Functions & migrations
@@ -302,7 +371,7 @@ Supabase Free Tier handles cron; upgrade if you need guaranteed ≤1 min jitter.
 
 ---
 
-## 11 · Operating Costs (≈10 users, 3 projects)
+## 12 · Operating Costs (≈10 users, 3 projects)
 
 | Item                                       | Volume       | Cost                 |
 | ------------------------------------------ | ------------ | -------------------- |
@@ -314,13 +383,13 @@ Supabase Free Tier handles cron; upgrade if you need guaranteed ≤1 min jitter.
 
 ---
 
-## 12 · Roadmap
+## 13 · Roadmap
 
 ### Phase 1: Core Processing (Current)
 * ✅ Telegram gateway with message type detection
-* 🔄 Transcript processor (Whisper integration)
+* ✅ Transcript processor (Whisper integration)
 * 🔄 File processor (document analysis)
-* 🔄 Photo processor (OCR + vision)
+* ✅ Photo processor (OCR + vision with structured outputs)
 
 ### Phase 2: Advanced Features
 * Multi-threaded conversations (persistent context)

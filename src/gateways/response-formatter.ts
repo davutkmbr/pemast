@@ -29,8 +29,42 @@ export class ResponseFormatter {
                `Document analysis will be implemented soon!`;
       
       case 'photo':
-        return `📸 **Photo received** (${metadata.fileSize ? Math.round(metadata.fileSize / 1024) + 'KB' : 'unknown size'})\n\n` +
-               `Image analysis will be implemented soon!`;
+        // Check if it was processed by photo processor
+        if (metadata.processingInfo?.processor === 'photo') {
+          if (metadata.processingInfo.error) {
+            return `📸 **Photo received** (${metadata.fileSize ? Math.round(metadata.fileSize / 1024) + 'KB' : 'unknown size'})\n` +
+                   `❌ Analysis failed: ${metadata.processingInfo.error}\n\n` +
+                   `I received your photo but couldn't analyze it. Please try again.`;
+          } else {
+            // Build rich response with structured data
+            let response = `📸 **${metadata.processingInfo.contentType?.toUpperCase() || 'IMAGE'} Analyzed**\n\n`;
+            
+            // Add extracted text if available
+            if (metadata.processingInfo.extractedText) {
+              response += `📝 **Text Found:**\n${metadata.processingInfo.extractedText}\n\n`;
+            }
+            
+            // Add description
+            if (metadata.processingInfo.description) {
+              response += `🔍 **Description:**\n${metadata.processingInfo.description}\n\n`;
+            }
+            
+            // Add key insights if available
+            if (metadata.processingInfo.keyInsights && metadata.processingInfo.keyInsights.length > 0) {
+              response += `💡 **Key Insights:**\n`;
+              metadata.processingInfo.keyInsights.forEach((insight: string, index: number) => {
+                response += `${index + 1}. ${insight}\n`;
+              });
+              response += '\n';
+            }
+            
+            response += `✅ Successfully analyzed using GPT-4 Vision`;
+            return response;
+          }
+        } else {
+          return `📸 **Photo received** (${metadata.fileSize ? Math.round(metadata.fileSize / 1024) + 'KB' : 'unknown size'})\n\n` +
+                 `Image analysis will be implemented soon!`;
+        }
       
       default:
         return `❓ **Unknown message type:** "${text}"`;

@@ -10,7 +10,7 @@ importers:
     dependencies:
       '@openai/agents':
         specifier: ^0.0.10
-        version: 0.0.10(ws@8.18.3)(zod@3.25.76)
+        version: 0.0.10(ws@8.18.3)(zod@4.0.5)
       '@supabase/supabase-js':
         specifier: ^2.50.5
         version: 2.50.5
@@ -19,10 +19,13 @@ importers:
         version: 17.2.0
       openai:
         specifier: ^5.9.0
-        version: 5.9.0(ws@8.18.3)(zod@3.25.76)
+        version: 5.9.0(ws@8.18.3)(zod@4.0.5)
       telegraf:
         specifier: ^4.16.3
         version: 4.16.3
+      zod:
+        specifier: ^4.0.5
+        version: 4.0.5
     devDependencies:
       '@types/node':
         specifier: ^24.0.13
@@ -1476,6 +1479,9 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
+  zod@4.0.5:
+    resolution: {integrity: sha512-/5UuuRPStvHXu7RS+gmvRf4NXrNxpSllGwDnCBcJZtQsKrviYXm54yDGV2KYNLT5kq0lHGcl7lqWJLgSaG+tgA==}
+
 snapshots:
 
   '@esbuild/aix-ppc64@0.22.0':
@@ -1707,32 +1713,32 @@ snapshots:
       - supports-color
     optional: true
 
-  '@openai/agents-core@0.0.10(ws@8.18.3)(zod@3.25.76)':
+  '@openai/agents-core@0.0.10(ws@8.18.3)(zod@4.0.5)':
     dependencies:
       '@openai/zod': zod@3.25.76
       debug: 4.4.1
-      openai: 5.9.0(ws@8.18.3)(zod@3.25.76)
+      openai: 5.9.0(ws@8.18.3)(zod@4.0.5)
     optionalDependencies:
       '@modelcontextprotocol/sdk': 1.15.1
-      zod: 3.25.76
+      zod: 4.0.5
     transitivePeerDependencies:
       - supports-color
       - ws
 
-  '@openai/agents-openai@0.0.10(ws@8.18.3)(zod@3.25.76)':
+  '@openai/agents-openai@0.0.10(ws@8.18.3)(zod@4.0.5)':
     dependencies:
-      '@openai/agents-core': 0.0.10(ws@8.18.3)(zod@3.25.76)
+      '@openai/agents-core': 0.0.10(ws@8.18.3)(zod@4.0.5)
       '@openai/zod': zod@3.25.76
       debug: 4.4.1
-      openai: 5.9.0(ws@8.18.3)(zod@3.25.76)
+      openai: 5.9.0(ws@8.18.3)(zod@4.0.5)
     transitivePeerDependencies:
       - supports-color
       - ws
       - zod
 
-  '@openai/agents-realtime@0.0.10(zod@3.25.76)':
+  '@openai/agents-realtime@0.0.10(zod@4.0.5)':
     dependencies:
-      '@openai/agents-core': 0.0.10(ws@8.18.3)(zod@3.25.76)
+      '@openai/agents-core': 0.0.10(ws@8.18.3)(zod@4.0.5)
       '@openai/zod': zod@3.25.76
       '@types/ws': 8.18.1
       debug: 4.4.1
@@ -1743,13 +1749,13 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@openai/agents@0.0.10(ws@8.18.3)(zod@3.25.76)':
+  '@openai/agents@0.0.10(ws@8.18.3)(zod@4.0.5)':
     dependencies:
-      '@openai/agents-core': 0.0.10(ws@8.18.3)(zod@3.25.76)
-      '@openai/agents-openai': 0.0.10(ws@8.18.3)(zod@3.25.76)
-      '@openai/agents-realtime': 0.0.10(zod@3.25.76)
+      '@openai/agents-core': 0.0.10(ws@8.18.3)(zod@4.0.5)
+      '@openai/agents-openai': 0.0.10(ws@8.18.3)(zod@4.0.5)
+      '@openai/agents-realtime': 0.0.10(zod@4.0.5)
       debug: 4.4.1
-      openai: 5.9.0(ws@8.18.3)(zod@3.25.76)
+      openai: 5.9.0(ws@8.18.3)(zod@4.0.5)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -2590,10 +2596,10 @@ snapshots:
 
   onetime@1.1.0: {}
 
-  openai@5.9.0(ws@8.18.3)(zod@3.25.76):
+  openai@5.9.0(ws@8.18.3)(zod@4.0.5):
     optionalDependencies:
       ws: 8.18.3
-      zod: 3.25.76
+      zod: 4.0.5
 
   optionator@0.9.4:
     dependencies:
@@ -2961,3 +2967,5 @@ snapshots:
     optional: true
 
   zod@3.25.76: {}
+
+  zod@4.0.5: {}

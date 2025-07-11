@@ -1,5 +1,6 @@
 import type { Context } from 'telegraf';
-import type { MessageProcessor, ProcessedMessage } from '../types.js';
+import type { MessageProcessor } from '../types.js';
+import type { ProcessedMessage, FileReference } from '../../types/index.js';
 import { PhotoProcessor, type ImageFile } from '../../processors/photo.processor.js';
 
 export interface TelegramPhotoProcessorConfig {
@@ -46,60 +47,61 @@ export class TelegramPhotoProcessor implements MessageProcessor {
       // Analyze using the generic photo processor
       const photoResult = await this.photoProcessor.analyzeImage(imageFile);
       
-      // Return processed message with analysis (formatting handled by ResponseFormatter)
+      // Create file reference
+      const fileReference: FileReference = {
+        id: fileId,
+        fileName,
+        mimeType: 'image/jpeg',
+        fileSize,
+        gateway: 'telegram',
+      };
+
+      // Return modern ProcessedMessage with analysis
       return {
-        text: photoResult.summary, // Brief summary for text field
-        type: 'photo',
-        metadata: {
-          userId: message.from.id.toString(),
-          chatId: message.chat.id.toString(),
-          messageId: message.message_id,
-          username: message.from.username,
-          firstName: message.from.first_name,
-          lastName: message.from.last_name,
-          timestamp: new Date(message.date * 1000),
-          fileId,
-          fileName,
-          fileSize: fileSize,
-          mimeType: 'image/jpeg',
-          processingInfo: {
-            processor: 'photo',
-            contentType: photoResult.contentType,
-            summary: photoResult.summary,
-            description: photoResult.description,
-            extractedText: photoResult.extractedText,
-            keyInsights: photoResult.keyInsights,
-            confidence: photoResult.confidence,
-            error: photoResult.error,
-            caption: caption,
-          },
+        content: photoResult.summary || caption || '[Photo analyzed]',
+        messageType: 'photo_analysis', // Use photo_analysis to indicate it was processed
+        gatewayType: 'telegram',
+        gatewayMessageId: message.message_id.toString(),
+        timestamp: new Date(message.date * 1000),
+        fileReference,
+        processingMetadata: {
+          processor: 'photo',
+          contentType: photoResult.contentType,
+          summary: photoResult.summary,
+          description: photoResult.description,
+          extractedText: photoResult.extractedText,
+          keyInsights: photoResult.keyInsights,
+          confidence: photoResult.confidence,
+          originalCaption: caption,
         },
+        processingStatus: 'completed',
       };
       
     } catch (error) {
       console.error('Error processing photo message:', error);
       
       // Return fallback message on processing failure
+      const largestPhoto = message.photo[message.photo.length - 1];
+      const fileReference: FileReference | undefined = largestPhoto ? {
+        id: largestPhoto.file_id,
+        fileName: `photo_${Date.now()}.jpg`,
+        mimeType: 'image/jpeg',
+        fileSize: largestPhoto.file_size,
+        gateway: 'telegram',
+      } : undefined;
+
       return {
-        text: '[Photo processing failed]',
-        type: 'photo',
-        metadata: {
-          userId: message.from.id.toString(),
-          chatId: message.chat.id.toString(),
-          messageId: message.message_id,
-          username: message.from.username,
-          firstName: message.from.first_name,
-          lastName: message.from.last_name,
-          timestamp: new Date(message.date * 1000),
-          fileId: undefined,
-          fileName: undefined,
-          fileSize: undefined,
-          mimeType: 'image/jpeg',
-          processingInfo: {
-            processor: 'photo',
-            error: error instanceof Error ? error.message : 'Unknown error',
-          },
+        content: message.caption || '[Photo processing failed]',
+        messageType: 'photo',
+        gatewayType: 'telegram',
+        gatewayMessageId: message.message_id.toString(),
+        timestamp: new Date(message.date * 1000),
+        fileReference,
+        processingMetadata: {
+          processor: 'photo',
+          error: error instanceof Error ? error.message : 'Unknown error',
         },
+        processingStatus: 'failed',
       };
     }
   }

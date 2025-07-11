@@ -1,10 +1,7 @@
 import type { Context } from 'telegraf';
 import { ResponseFormatter } from './response-formatter.js';
-import type { ProcessedMessage, MessageProcessor } from './types.js';
-
-export interface MessageExtractor {
-  extractMessage(ctx: any, messageType: string): ProcessedMessage;
-}
+import type { MessageProcessor, MessageExtractor } from './types.js';
+import type { ProcessedMessage } from '../types/index.js';
 
 export class MessageRouter {
   private processors: Map<string, MessageProcessor> = new Map();
@@ -24,30 +21,39 @@ export class MessageRouter {
     this.processors.set(type, processor);
   }
 
+  getProcessor(type: string): MessageProcessor | undefined {
+    return this.processors.get(type);
+  }
+
+  getExtractor(): MessageExtractor | null {
+    return this.messageExtractor;
+  }
+
   async routeMessage(ctx: Context, messageType: string): Promise<string> {
     const processor = this.processors.get(messageType);
     
     let processedMessage: ProcessedMessage;
     
     if (processor) {
-      // Use registered processor
+      // Use registered processor (voice, photo processors etc.)
       processedMessage = await processor.processMessage(ctx);
     } else {
       // Fallback to basic extraction
       if (!this.messageExtractor) {
         throw new Error('No message extractor configured for fallback processing');
       }
-      processedMessage = this.messageExtractor.extractMessage(ctx, messageType);
+      processedMessage = await this.messageExtractor.extractMessage(ctx, messageType);
     }
 
     // Log the processing
     console.log('Processing message:', {
-      type: processedMessage.type,
-      text: processedMessage.text.substring(0, 100) + '...',
-      hasFile: !!processedMessage.metadata.fileId,
+      type: processedMessage.messageType,
+      content: processedMessage.content.substring(0, 100) + '...',
+      hasFile: !!processedMessage.fileReference,
+      gateway: processedMessage.gatewayType,
     });
 
-    // Format response
+    // Format response using modern formatter
     return this.responseFormatter.formatResponse(processedMessage);
   }
 } 

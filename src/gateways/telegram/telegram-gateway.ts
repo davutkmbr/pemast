@@ -4,25 +4,33 @@ import { message } from 'telegraf/filters';
 import { BaseGateway, type GatewayConfig } from '../base-gateway.js';
 import { MessageRouter } from '../message-router.js';
 import { TelegramExtractor } from './telegram-extractor.js';
+import { MessageProcessingService } from '../../services/message-processing.service.js';
 import type { MessageProcessor } from '../types.js';
 
 export class TelegramGateway extends BaseGateway {
   private bot: Telegraf;
   private messageRouter: MessageRouter;
+  private messageProcessingService: MessageProcessingService;
+  private telegramExtractor: TelegramExtractor;
   private status: 'starting' | 'running' | 'stopping' | 'stopped' = 'stopped';
 
   constructor(config: GatewayConfig) {
     super(config);
     this.bot = new Telegraf(config.token);
     
-    // Create message router with Telegram-specific extractor
-    const telegramExtractor = new TelegramExtractor();
-    this.messageRouter = new MessageRouter(telegramExtractor);
+    // Create Telegram-specific extractor
+    this.telegramExtractor = new TelegramExtractor();
+    
+    // Create message router with Telegram extractor
+    this.messageRouter = new MessageRouter(this.telegramExtractor);
+    
+    // Initialize generic message processing service
+    this.messageProcessingService = new MessageProcessingService();
     
     this.setupHandlers();
   }
 
-  getGatewayType(): string {
+  getGatewayType(): 'telegram' {
     return 'telegram';
   }
 
@@ -73,35 +81,127 @@ export class TelegramGateway extends BaseGateway {
 
   private async handleMessage(ctx: Context, messageType: string) {
     try {
-      ctx.sendChatAction('typing')
+      ctx.sendChatAction('typing');
+      
+      // Process message for AI response
       const response = await this.messageRouter.routeMessage(ctx, messageType);
+      
+      // Process message for database storage
+      await this.saveMessageToDatabase(ctx, messageType);
+      
+      // Send response to user
       await this.sendMessage(ctx, response);
+      
     } catch (error) {
       console.error('Error handling message:', error);
       await this.sendMessage(ctx, 'Sorry, I encountered an error processing your message.');
     }
   }
 
-  private async sendMessage(ctx: Context, text: string): Promise<void> {
+  /**
+   * Save message to database using the modern pipeline
+   */
+  private async saveMessageToDatabase(ctx: Context, messageType: string) {
     try {
-      await ctx.reply(text);
+      // Extract message and user context
+      const processedMessage = await this.telegramExtractor.extractMessage(ctx, messageType);
+      const userContext = this.telegramExtractor.extractUserContext(ctx);
+      
+      // Save to database using generic service
+      const result = await this.messageProcessingService.processMessage(
+        processedMessage,
+        userContext,
+        'telegram'
+      );
+      
+      if (result.success) {
+        console.log(`💾 Message saved to database: ${result.messageId}`);
+      } else {
+        console.error(`❌ Failed to save message: ${result.error}`);
+      }
     } catch (error) {
-      console.error('Error sending message:', error);
-      throw error;
+      console.error('Error saving message to database:', error);
     }
   }
 
-  start(): void {
-    this.status = 'starting';
-    this.bot.launch();
-    this.status = 'running';
-    console.log('Telegram gateway started');
+  private async sendMessage(ctx: Context, message: string) {
+    try {
+      // Split long messages if needed
+      const maxLength = 4096; // Telegram's message limit
+      if (message.length <= maxLength) {
+        await ctx.reply(message);
+      } else {
+        // Split into chunks
+        const chunks = this.splitMessage(message, maxLength);
+        for (const chunk of chunks) {
+          await ctx.reply(chunk);
+        }
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+    }
   }
 
-  stop(): void {
+  private splitMessage(message: string, maxLength: number): string[] {
+    const chunks: string[] = [];
+    let currentChunk = '';
+    
+    const lines = message.split('\n');
+    
+    for (const line of lines) {
+      if ((currentChunk + line + '\n').length > maxLength) {
+        if (currentChunk) {
+          chunks.push(currentChunk.trim());
+          currentChunk = '';
+        }
+        
+        // If a single line is too long, split it
+        if (line.length > maxLength) {
+          const lineChunks = line.match(new RegExp(`.{1,${maxLength - 10}}`, 'g')) || [];
+          chunks.push(...lineChunks);
+        } else {
+          currentChunk = line + '\n';
+        }
+      } else {
+        currentChunk += line + '\n';
+      }
+    }
+    
+    if (currentChunk.trim()) {
+      chunks.push(currentChunk.trim());
+    }
+    
+    return chunks;
+  }
+
+  start() {
+    if (this.status !== 'stopped') {
+      console.warn('Gateway is already starting or running');
+      return;
+    }
+
+    this.status = 'starting';
+    
+    this.bot.launch()
+      .then(() => {
+        this.status = 'running';
+        console.log('🚀 Telegram gateway started successfully');
+      })
+      .catch((error) => {
+        this.status = 'stopped';
+        console.error('Failed to start Telegram gateway:', error);
+      });
+  }
+
+  stop() {
+    if (this.status === 'stopped' || this.status === 'stopping') {
+      return;
+    }
+
     this.status = 'stopping';
-    this.bot.stop();
+    
+    this.bot.stop('SIGTERM');
     this.status = 'stopped';
-    console.log('Telegram gateway stopped');
+    console.log('🛑 Telegram gateway stopped');
   }
 } 

@@ -1,5 +1,6 @@
 import type { Context } from 'telegraf';
-import type { MessageProcessor, ProcessedMessage } from '../types.js';
+import type { MessageProcessor } from '../types.js';
+import type { ProcessedMessage, FileReference } from '../../types/index.js';
 import { TranscriptProcessor, type AudioFile } from '../../processors/transcript.processor.js';
 
 export interface TelegramVoiceProcessorConfig {
@@ -49,57 +50,55 @@ export class TelegramVoiceProcessor implements MessageProcessor {
       // Transcribe using the generic processor
       const transcriptResult = await this.transcriptProcessor.transcribeAudio(audioFile);
       
-      // Return processed message with transcription
+      // Create file reference
+      const fileReference: FileReference = {
+        id: fileId,
+        fileName,
+        mimeType,
+        gateway: 'telegram',
+      };
+
+      // Return modern ProcessedMessage with transcription
       return {
-        text: transcriptResult.text || '[Voice message - transcription failed]',
-        type: 'voice',
-        metadata: {
-          userId: message.from.id.toString(),
-          chatId: message.chat.id.toString(),
-          messageId: message.message_id,
-          username: message.from.username,
-          firstName: message.from.first_name,
-          lastName: message.from.last_name,
-          timestamp: new Date(message.date * 1000),
-          fileId,
-          fileName,
-          fileSize: undefined, // We don't have size info after download
-          mimeType,
-          processingInfo: {
-            processor: 'transcript',
-            duration: transcriptResult.duration,
-            transcriptionLength: transcriptResult.text.length,
-            confidence: transcriptResult.confidence,
-            error: transcriptResult.error,
-          },
+        content: transcriptResult.text || '[Voice message - transcription failed]',
+        messageType: 'voice',
+        gatewayType: 'telegram',
+        gatewayMessageId: message.message_id.toString(),
+        timestamp: new Date(message.date * 1000),
+        fileReference,
+        processingMetadata: {
+          processor: 'transcript',
+          duration: transcriptResult.duration,
+          transcriptionLength: transcriptResult.text.length,
+          confidence: transcriptResult.confidence,
         },
+        processingStatus: transcriptResult.error ? 'failed' : 'completed',
       };
       
     } catch (error) {
       console.error('Error processing voice message:', error);
       
       // Return fallback message on processing failure
+      const fileReference: FileReference = {
+        id: fileId,
+        fileName,
+        mimeType,
+        gateway: 'telegram',
+      };
+
       return {
-        text: '[Voice message - processing failed]',
-        type: 'voice',
-        metadata: {
-          userId: message.from.id.toString(),
-          chatId: message.chat.id.toString(),
-          messageId: message.message_id,
-          username: message.from.username,
-          firstName: message.from.first_name,
-          lastName: message.from.last_name,
-          timestamp: new Date(message.date * 1000),
-          fileId,
-          fileName,
-          fileSize: undefined,
-          mimeType,
-          processingInfo: {
-            processor: 'transcript',
-            duration,
-            error: error instanceof Error ? error.message : 'Unknown error',
-          },
+        content: '[Voice message - processing failed]',
+        messageType: 'voice',
+        gatewayType: 'telegram',
+        gatewayMessageId: message.message_id.toString(),
+        timestamp: new Date(message.date * 1000),
+        fileReference,
+        processingMetadata: {
+          processor: 'transcript',
+          duration,
+          error: error instanceof Error ? error.message : 'Unknown error',
         },
+        processingStatus: 'failed',
       };
     }
   }

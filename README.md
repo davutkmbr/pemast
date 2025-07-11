@@ -378,7 +378,7 @@ export default {
 
 ```bash
 # Generate migration from schema changes
-npx drizzle-kit generate:pg
+npx drizzle-kit generate
 
 # Push to Supabase (development)
 supabase db push ./drizzle/*.sql

@@ -1,58 +1,62 @@
-import type { ProcessedMessage } from './types.js';
+import type { ProcessedMessage } from '../types/index.js';
 
 export class ResponseFormatter {
   formatResponse(processedMessage: ProcessedMessage): string {
-    const { type, text, metadata } = processedMessage;
+    const { messageType, content, fileReference, processingMetadata } = processedMessage;
     
-    switch (type) {
+    switch (messageType) {
       case 'text':
-        return `📝 **Message received:** "${text}"`;
+        return `📝 **Message received:** "${content}"`;
       
       case 'voice':
         // Check if it was processed by transcript processor
-        if (metadata.processingInfo?.processor === 'transcript') {
-          if (metadata.processingInfo.error) {
-            return `🎤 **Voice message received** (${metadata.processingInfo.duration || 'unknown'}s)\n` +
-                   `❌ Transcription failed: ${metadata.processingInfo.error}\n\n` +
+        if (processingMetadata?.processor === 'transcript') {
+          if (processingMetadata.error) {
+            return `🎤 **Voice message received** (${processingMetadata.duration || 'unknown'}s)\n` +
+                   `❌ Transcription failed: ${processingMetadata.error}\n\n` +
                    `I received your voice message but couldn't transcribe it. Please try again or send a text message.`;
           } else {
-            return `🎤 **Voice message transcribed** (${metadata.processingInfo.duration || 'unknown'}s):\n\n` +
-                   `"${text}"\n\n` +
+            return `🎤 **Voice message transcribed** (${processingMetadata.duration || 'unknown'}s):\n\n` +
+                   `"${content}"\n\n` +
                    `✅ Successfully processed using OpenAI Whisper`;
           }
         } else {
-          return `🎤 Voice message received (${metadata.fileSize ? Math.round(metadata.fileSize / 1024) + 'KB' : 'unknown size'}). Transcription will be implemented soon!`;
+          const fileSize = fileReference?.fileSize;
+          return `🎤 Voice message received (${fileSize ? Math.round(fileSize / 1024) + 'KB' : 'unknown size'}). Transcription will be implemented soon!`;
         }
       
       case 'document':
-        return `📄 **Document received:** "${metadata.fileName}" (${metadata.fileSize ? Math.round(metadata.fileSize / 1024) + 'KB' : 'unknown size'})\n\n` +
+        const fileName = fileReference?.fileName || 'unknown';
+        const fileSize = fileReference?.fileSize;
+        return `📄 **Document received:** "${fileName}" (${fileSize ? Math.round(fileSize / 1024) + 'KB' : 'unknown size'})\n\n` +
                `Document analysis will be implemented soon!`;
       
       case 'photo':
         // Check if it was processed by photo processor
-        if (metadata.processingInfo?.processor === 'photo') {
-          if (metadata.processingInfo.error) {
-            return `📸 **Photo received** (${metadata.fileSize ? Math.round(metadata.fileSize / 1024) + 'KB' : 'unknown size'})\n` +
-                   `❌ Analysis failed: ${metadata.processingInfo.error}\n\n` +
+        if (processingMetadata?.processor === 'photo') {
+          if (processingMetadata.error) {
+            const photoFileSize = fileReference?.fileSize;
+            return `📸 **Photo received** (${photoFileSize ? Math.round(photoFileSize / 1024) + 'KB' : 'unknown size'})\n` +
+                   `❌ Analysis failed: ${processingMetadata.error}\n\n` +
                    `I received your photo but couldn't analyze it. Please try again.`;
           } else {
             // Build rich response with structured data
-            let response = `📸 **${metadata.processingInfo.contentType?.toUpperCase() || 'IMAGE'} Analyzed**\n\n`;
+            let response = `📸 **${processingMetadata.contentType?.toUpperCase() || 'IMAGE'} Analyzed**\n\n`;
             
             // Add extracted text if available
-            if (metadata.processingInfo.extractedText) {
-              response += `📝 **Text Found:**\n${metadata.processingInfo.extractedText}\n\n`;
+            if (processingMetadata.extractedText) {
+              response += `📝 **Text Found:**\n${processingMetadata.extractedText}\n\n`;
             }
             
             // Add description
-            if (metadata.processingInfo.description) {
-              response += `🔍 **Description:**\n${metadata.processingInfo.description}\n\n`;
+            if (processingMetadata.description) {
+              response += `🔍 **Description:**\n${processingMetadata.description}\n\n`;
             }
             
             // Add key insights if available
-            if (metadata.processingInfo.keyInsights && metadata.processingInfo.keyInsights.length > 0) {
+            if (processingMetadata.keyInsights && Array.isArray(processingMetadata.keyInsights)) {
               response += `💡 **Key Insights:**\n`;
-              metadata.processingInfo.keyInsights.forEach((insight: string, index: number) => {
+              processingMetadata.keyInsights.forEach((insight: string, index: number) => {
                 response += `${index + 1}. ${insight}\n`;
               });
               response += '\n';
@@ -62,12 +66,16 @@ export class ResponseFormatter {
             return response;
           }
         } else {
-          return `📸 **Photo received** (${metadata.fileSize ? Math.round(metadata.fileSize / 1024) + 'KB' : 'unknown size'})\n\n` +
+          const photoFileSize = fileReference?.fileSize;
+          return `📸 **Photo received** (${photoFileSize ? Math.round(photoFileSize / 1024) + 'KB' : 'unknown size'})\n\n` +
                  `Image analysis will be implemented soon!`;
         }
       
+      case 'photo_analysis':
+        return `📸 **Photo analysis completed**\n\n${content}`;
+      
       default:
-        return `❓ **Unknown message type:** "${text}"`;
+        return `❓ **Unknown message type:** "${content}"`;
     }
   }
 } 

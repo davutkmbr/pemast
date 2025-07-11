@@ -1,6 +1,7 @@
 import { eq, and, lte, gt, or, ilike, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { reminders } from '../db/schema.js';
+import { embeddingService } from './embedding.service.js';
 import type { 
   CreateReminderInput, 
   DatabaseContext, 
@@ -15,29 +16,6 @@ import type {
 export class ReminderService {
 
   /**
-   * Generate embedding for reminder content (for semantic search)
-   */
-  private async generateEmbedding(text: string): Promise<number[]> {
-    try {
-      // This would use OpenAI embeddings API
-      // For now, returning empty array - implement when OpenAI integration is ready
-      console.log('Generating embedding for:', text.substring(0, 50) + '...');
-      
-      // TODO: Implement OpenAI embedding generation
-      // const response = await openai.embeddings.create({
-      //   model: "text-embedding-3-small",
-      //   input: text,
-      // });
-      // return response.data[0].embedding;
-      
-      return []; // Placeholder
-    } catch (error) {
-      console.error('Error generating embedding:', error);
-      return [];
-    }
-  }
-
-  /**
    * Create a new reminder (one-time or recurring) with semantic search support
    */
   async createReminder(
@@ -47,14 +25,14 @@ export class ReminderService {
     try {
       const isRecurring = input.recurrence && input.recurrence.type !== 'none';
       
-      // Generate embedding for semantic search
-      const searchText = [
+      // Generate embedding for semantic search using the generic service
+      const searchText = embeddingService.combineFieldsForEmbedding([
         input.content,
-        input.summary || '',
+        input.summary,
         ...(input.tags || [])
-      ].filter(Boolean).join(' ');
+      ]);
       
-      const embedding = await this.generateEmbedding(searchText);
+      const embedding = await embeddingService.generateEmbedding(searchText);
       
       const [savedReminder] = await db.insert(reminders).values({
         projectId: context.projectId,
@@ -81,7 +59,8 @@ export class ReminderService {
         summary: input.summary,
         tags: input.tags,
         scheduledFor: input.scheduledFor,
-        recurrence: input.recurrence
+        recurrence: input.recurrence,
+        hasEmbedding: embedding.length > 0
       });
 
       return savedReminder.id;
@@ -286,8 +265,8 @@ export class ReminderService {
     limit: number = 5
   ): Promise<VectorSearchResult<Reminder>[]> {
     try {
-      // Generate embedding for the search query
-      const queryEmbedding = await this.generateEmbedding(query);
+      // Generate embedding for the search query using the generic service
+      const queryEmbedding = await embeddingService.generateEmbedding(query);
       
       if (queryEmbedding.length === 0) {
         // Fallback to text search if embedding generation fails

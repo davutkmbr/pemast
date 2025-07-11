@@ -1,6 +1,6 @@
 // Example usage of ReminderService
-import { ReminderService } from './reminder.service.js';
-import type { CreateReminderInput, DatabaseContext } from '../types/index.js';
+import { ReminderService } from '../reminder.service.js';
+import type { CreateReminderInput, DatabaseContext } from '../../types/index.js';
 
 async function exampleUsage() {
   const reminderService = new ReminderService();

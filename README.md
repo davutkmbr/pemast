@@ -26,6 +26,7 @@ Built with **Node 18 + TypeScript**, **OpenAI Agents SDK**, and **Supabase** (Po
 | **Agent runtime**        | `@openai/agents`        | Main conversational agent, decides which tools to call. |
 | **Transcript processor** | `@openai/openai` (Whisper) | Converts voice messages to text before agent processing. |
 | **File processor**       | `@openai/openai` + custom | Analyzes and summarizes documents, images, and files. |
+| **Database ORM**         | `drizzle-orm` + `postgres` | Type-safe database operations with PostgreSQL + pgvector. |
 | **Database**             | Supabase Free Tier      | PostgreSQL 15 + pgvector + pg\_cron + Storage.      |
 | **Tests / CI**           | `vitest`, `happydom`    | Fast unit & integration tests.                      |
 | **Task runner**          | `pnpm`                  | Uniform scripts (`dev`, `test`, `deploy`).          |
@@ -39,39 +40,26 @@ Built with **Node 18 + TypeScript**, **OpenAI Agents SDK**, and **Supabase** (Po
 
 ```typescript
 // ✅ CORRECT - Use structured outputs with Zod
-const ResponseSchema = z.object({
-  summary: z.string().describe('Concise summary of the content'),
-  keyPoints: z.array(z.string()).describe('Important points extracted'),
-  contentType: z.string().describe('Type of content analyzed'),
+const Step = z.object({
+  explanation: z.string(),
+  output: z.string(),
 });
 
-const response = await openai.chat.completions.create({
-  model: "gpt-4o-mini",
-  messages: [...],
-  response_format: {
-    type: "json_schema",
-    json_schema: {
-      name: "content_analysis",
-      strict: true,
-      schema: {
-        type: "object",
-        properties: {
-          summary: { type: "string", description: "Concise summary of the content" },
-          keyPoints: { 
-            type: "array", 
-            items: { type: "string" }, 
-            description: "Important points extracted" 
-          },
-          contentType: { type: "string", description: "Type of content analyzed" }
-        },
-        required: ["summary", "keyPoints", "contentType"],
-        additionalProperties: false
-      }
-    }
-  }
+const MathReasoning = z.object({
+  steps: z.array(Step),
+  final_answer: z.string(),
 });
 
-const parsed = ResponseSchema.parse(JSON.parse(response.choices[0].message.content));
+const completion = await openai.chat.completions.parse({
+  model: "gpt-4o-2024-08-06",
+  messages: [
+    { role: "system", content: "You are a helpful math tutor. Guide the user through the solution step by step." },
+    { role: "user", content: "how can I solve 8x + 7 = -23" },
+  ],
+  response_format: zodResponseFormat(MathReasoning, "math_reasoning"),
+});
+
+const math_reasoning = completion.choices[0].message
 ```
 
 ```typescript
@@ -164,6 +152,11 @@ src/
  │   ├─ facts.service.ts
  │   └─ storage.service.ts   # Supabase Storage operations
  │
+ ├─ db/                      # Drizzle ORM database layer
+ │   ├─ schema.ts            # TypeScript schema definitions
+ │   ├─ client.ts            # Database connection & types
+ │   └─ migrations/          # Generated SQL migrations
+ │
  ├─ cron/                    # Supabase Edge Functions triggered by pg_cron
  │   └─ due-reminders.ts
  │
@@ -244,73 +237,201 @@ Flow: Gateway → Transcript Processor → Agent → Store Memory Tool → Respo
 
 ---
 
-## 7 · Database Schema (essential tables)
+## 7 · Database Schema (Drizzle ORM)
 
-```sql
--- Projects (personal or team)
-create table projects (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  created_at timestamptz default now()
-);
+### **🎯 TypeScript-First Schema**
+We use **Drizzle ORM** for type-safe database operations with Supabase PostgreSQL.
 
--- Users
-create table users (
-  id uuid primary key default gen_random_uuid(),
-  external_id text,          -- channel user id
-  display_name text
-);
+```bash
+# Install Drizzle
+pnpm add drizzle-orm postgres
+pnpm add -D drizzle-kit
+```
 
--- Memberships (many-to-many)
-create table project_members (
-  project_id uuid references projects on delete cascade,
-  user_id    uuid references users    on delete cascade,
-  role       text default 'member',
-  primary key (project_id, user_id)
-);
+### **📋 Schema Definition (`src/db/schema.ts`)**
 
--- Channels bound to a project
-create table channels (
-  id uuid primary key default gen_random_uuid(),
-  project_id uuid references projects on delete cascade,
-  type text,                 -- 'telegram', 'slack', ...
-  external_chat_id text
-);
+```typescript
+import {
+  pgTable, pgEnum, uuid, text, timestamp, integer, real, vector
+} from 'drizzle-orm/pg-core';
+import { relations } from 'drizzle-orm';
 
--- Enhanced data tables (all carry project_id & user_id for RLS)
-create table reminders (
-  id uuid primary key default gen_random_uuid(),
-  project_id uuid references projects on delete cascade,
-  user_id uuid references users on delete cascade,
-  content text not null,
-  scheduled_for timestamptz not null,
-  created_at timestamptz default now()
-);
+// Enums
+export const roleEnum = pgEnum('role', ['owner', 'member']);
+export const channelTypeEnum = pgEnum('channel_type', ['telegram', 'slack', 'discord']);
+export const fileTypeEnum = pgEnum('file_type', ['text', 'voice', 'document', 'photo']);
 
-create table memories (
-  id uuid primary key default gen_random_uuid(),
-  project_id uuid references projects on delete cascade,
-  user_id uuid references users on delete cascade,
-  content text not null,
-  summary text,
-  embedding vector(1536),     -- OpenAI embeddings
-  file_path text,             -- Supabase Storage path
-  file_type text,             -- 'text', 'voice', 'document', 'photo'
-  metadata jsonb,             -- processor-specific data
-  created_at timestamptz default now()
-);
+// Core tables
+export const projects = pgTable('projects', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
 
-create table facts (
-  id uuid primary key default gen_random_uuid(),
-  project_id uuid references projects on delete cascade,
-  user_id uuid references users on delete cascade,
-  key_text text not null,
-  value_text text not null,
-  embedding vector(1536),     -- for semantic search
-  confidence real default 1.0,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
+export const users = pgTable('users', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  externalId: text('external_id'),
+  displayName: text('display_name'),
+});
+
+export const projectMembers = pgTable('project_members', {
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  role: roleEnum('role').default('member'),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.projectId, t.userId] }),
+}));
+
+export const channels = pgTable('channels', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  type: channelTypeEnum('type'),
+  externalChatId: text('external_chat_id'),
+});
+
+// Data tables
+export const reminders = pgTable('reminders', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  content: text('content').notNull(),
+  scheduledFor: timestamp('scheduled_for').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const memories = pgTable('memories', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  content: text('content').notNull(),
+  summary: text('summary'),
+  embedding: vector('embedding', { dimensions: 1536 }), // OpenAI embeddings
+  filePath: text('file_path'),
+  fileType: fileTypeEnum('file_type'),
+  metadata: text('metadata').$type<Record<string, any>>(), // JSON metadata
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const facts = pgTable('facts', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  keyText: text('key_text').notNull(),
+  valueText: text('value_text').notNull(),
+  embedding: vector('embedding', { dimensions: 1536 }),
+  confidence: real('confidence').default(1.0),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Relations for better DX
+export const projectsRelations = relations(projects, ({ many }) => ({
+  members: many(projectMembers),
+  channels: many(channels),
+  reminders: many(reminders),
+  memories: many(memories),
+  facts: many(facts),
+}));
+
+export const usersRelations = relations(users, ({ many }) => ({
+  projectMemberships: many(projectMembers),
+  reminders: many(reminders),
+  memories: many(memories),
+  facts: many(facts),
+}));
+```
+
+### **🔧 Database Client (`src/db/client.ts`)**
+
+```typescript
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+import * as schema from './schema.js';
+
+const connectionString = process.env.DATABASE_URL!;
+const client = postgres(connectionString);
+export const db = drizzle(client, { schema });
+
+// Type-safe queries
+export type User = typeof schema.users.$inferSelect;
+export type NewUser = typeof schema.users.$inferInsert;
+export type Memory = typeof schema.memories.$inferSelect;
+export type NewMemory = typeof schema.memories.$inferInsert;
+```
+
+### **📝 Drizzle Configuration (`drizzle.config.ts`)**
+
+```typescript
+import type { Config } from 'drizzle-kit';
+
+export default {
+  schema: './src/db/schema.ts',
+  out: './drizzle',
+  driver: 'pg',
+  dbCredentials: {
+    connectionString: process.env.DATABASE_URL!,
+  },
+} satisfies Config;
+```
+
+### **🚀 Migration Workflow**
+
+```bash
+# Generate migration from schema changes
+npx drizzle-kit generate:pg
+
+# Push to Supabase (development)
+supabase db push ./drizzle/*.sql
+
+# Or apply via Supabase migrations (production)
+supabase db diff --file new_migration
+supabase db push
+```
+
+### **💡 Usage Examples**
+
+```typescript
+import { db } from '@/db/client';
+import { memories, users, projects } from '@/db/schema';
+import { eq, and, desc } from 'drizzle-orm';
+
+// Type-safe inserts
+const newMemory = await db.insert(memories).values({
+  projectId: 'uuid...',
+  userId: 'uuid...',
+  content: 'Meeting notes from today',
+  summary: 'Discussed Q1 goals',
+  fileType: 'text',
+}).returning();
+
+// Type-safe queries with relations
+const userMemories = await db.query.memories.findMany({
+  where: eq(memories.userId, userId),
+  orderBy: desc(memories.createdAt),
+  limit: 10,
+  with: {
+    user: true,
+    project: true,
+  },
+});
+
+// Vector similarity search
+const similarMemories = await db.execute(sql`
+  SELECT *, embedding <=> ${queryEmbedding} as distance
+  FROM memories 
+  WHERE project_id = ${projectId}
+  ORDER BY embedding <=> ${queryEmbedding}
+  LIMIT 5
+`);
+```
+
+### **🎯 Benefits**
+
+- **100% Type Safety**: Schema changes instantly reflect in TypeScript
+- **Migration Safety**: Generated SQL migrations, no manual errors  
+- **IDE Support**: Full autocompletion for tables, columns, relations
+- **Performance**: Generates optimized SQL, no ORM overhead
+- **Supabase Compatible**: Works seamlessly with pgvector, RLS, etc.
 ```
 
 ---
@@ -331,7 +452,8 @@ create table facts (
 ```bash
 pnpm i
 pnpm add @openai/agents @openai/openai @supabase/supabase-js telegraf
-pnpm add -D @types/telegraf
+pnpm add drizzle-orm postgres zod
+pnpm add -D @types/telegraf drizzle-kit
 pnpm supabase:start          # local Postgres with pgvector/cron
 pnpm supabase:migrate
 pnpm dev                     # tsx watch
@@ -345,6 +467,20 @@ OPENAI_API_KEY=             # From OpenAI Dashboard
 OPENAI_ORG_ID=              # From OpenAI Dashboard (optional)
 SUPABASE_URL=               # From Supabase Dashboard
 SUPABASE_ANON_KEY=          # From Supabase Dashboard
+DATABASE_URL=               # PostgreSQL connection string
+```
+
+### **Database Setup**
+
+```bash
+# Generate Drizzle schema migrations
+npx drizzle-kit generate:pg
+
+# Apply to Supabase (development)
+supabase db push ./drizzle/*.sql
+
+# Generate TypeScript types
+npx drizzle-kit introspect:pg
 ```
 
 ---
@@ -388,8 +524,9 @@ Supabase Free Tier handles cron; upgrade if you need guaranteed ≤1 min jitter.
 ### Phase 1: Core Processing (Current)
 * ✅ Telegram gateway with message type detection
 * ✅ Transcript processor (Whisper integration)
-* 🔄 File processor (document analysis)
 * ✅ Photo processor (OCR + vision with structured outputs)
+* 🔄 File processor (document analysis)
+* 🔄 Drizzle ORM schema + database client setup
 
 ### Phase 2: Advanced Features
 * Multi-threaded conversations (persistent context)
@@ -402,3 +539,4 @@ Supabase Free Tier handles cron; upgrade if you need guaranteed ≤1 min jitter.
 * Smart categorization of memories
 * Cross-reference facts automatically
 * HNSW index optimization for large datasets
+```

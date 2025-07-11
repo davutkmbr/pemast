@@ -2,12 +2,14 @@ import { MessageService } from './message.service.js';
 import { UserService } from './user.service.js';
 import { ProjectService } from './project.service.js';
 import { ChannelService } from './channel.service.js';
+import { MemoryService } from './memory.service.js';
 import type { 
   ProcessedMessage, 
   DatabaseContext, 
   GatewayType, 
   UserContext,
-  MessageProcessingResult 
+  MessageProcessingResult,
+  CreateMemoryInput 
 } from '../types/index.js';
 
 /**
@@ -16,6 +18,7 @@ import type {
  * 2. Project resolution/creation  
  * 3. Channel resolution/creation
  * 4. Message storage
+ * 5. Memory creation (for file-based content)
  * 
  * This service is gateway-agnostic and can be used by any platform (Telegram, Slack, etc.)
  */
@@ -24,12 +27,14 @@ export class MessageProcessingService {
   private userService: UserService;
   private projectService: ProjectService;
   private channelService: ChannelService;
+  private memoryService: MemoryService;
 
   constructor() {
     this.messageService = new MessageService();
     this.userService = new UserService();
     this.projectService = new ProjectService();
     this.channelService = new ChannelService();
+    this.memoryService = new MemoryService();
   }
 
   /**
@@ -67,6 +72,11 @@ export class MessageProcessingService {
       // Step 5: Save message to database
       const messageId = await this.messageService.saveMessage(processedMessage, context);
 
+      // Step 6: Create memory for file-based content (photos, documents, audio files)
+      if (this.shouldCreateMemory(processedMessage)) {
+        await this.createMemoryFromMessage(messageId, processedMessage, context);
+      }
+
       console.log(`✅ Message saved successfully: ${messageId}`);
 
       return {
@@ -85,6 +95,155 @@ export class MessageProcessingService {
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
+  }
+
+  /**
+   * Determine if a message should create a memory record
+   * Strategy: Voice messages → NO memory (just transcript in messages.content)
+   *          Photos, documents, audio files → YES memory (processed summary)
+   */
+  private shouldCreateMemory(message: ProcessedMessage): boolean {
+    // Voice messages only get transcription in messages.content, no memory
+    if (message.messageType === 'voice') {
+      return false;
+    }
+
+    // Documents and other file attachments (except voice) get memories
+    if (message.fileReference) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Create memory from processed message content
+   */
+  private async createMemoryFromMessage(
+    messageId: string,
+    message: ProcessedMessage,
+    context: DatabaseContext
+  ): Promise<void> {
+    try {
+      const metadata = message.processingMetadata || {};
+      
+      // Extract summary and insights from processing metadata
+      const summary = this.extractSummary(message, metadata);
+      const tags = this.extractTags(message, metadata);
+      
+      const memoryInput: CreateMemoryInput = {
+        messageId,
+        content: this.buildMemoryContent(message, metadata),
+        summary,
+        fileId: metadata.fileId || undefined,
+        metadata: {
+          processor: metadata.processor,
+          contentType: metadata.contentType,
+          extractedText: metadata.extractedText,
+          keyInsights: metadata.keyInsights,
+          confidence: metadata.confidence,
+          originalFileName: message.fileReference?.fileName,
+          mimeType: message.fileReference?.mimeType,
+          processingTimestamp: new Date().toISOString(),
+        },
+        tags,
+      };
+
+      const memoryId = await this.memoryService.createMemory(memoryInput, context);
+      console.log(`✅ Memory created for message ${messageId}: ${memoryId}`);
+      
+    } catch (error) {
+      console.error('Error creating memory from message:', error);
+      // Don't throw - memory creation failure shouldn't break message processing
+    }
+  }
+
+  /**
+   * Build comprehensive memory content from message and metadata
+   */
+  private buildMemoryContent(message: ProcessedMessage, metadata: any): string {
+    const parts: string[] = [];
+    
+    // Add original message content
+    if (message.content && message.content !== '[Photo analyzed]') {
+      parts.push(`Content: ${message.content}`);
+    }
+    
+    // Add extracted text (OCR, document parsing)
+    if (metadata.extractedText) {
+      parts.push(`Extracted Text: ${metadata.extractedText}`);
+    }
+    
+    // Add AI-generated description
+    if (metadata.description) {
+      parts.push(`Description: ${metadata.description}`);
+    }
+    
+    // Add key insights
+    if (metadata.keyInsights && Array.isArray(metadata.keyInsights)) {
+      parts.push(`Key Insights: ${metadata.keyInsights.join(', ')}`);
+    }
+    
+    // Add file information
+    if (message.fileReference) {
+      parts.push(`File: ${message.fileReference.fileName} (${message.fileReference.mimeType})`);
+    }
+    
+    return parts.join('\n\n');
+  }
+
+  /**
+   * Extract summary for memory from processing results
+   */
+  private extractSummary(message: ProcessedMessage, metadata: any): string {
+    // Use AI-generated summary if available
+    if (metadata.summary) {
+      return metadata.summary;
+    }
+    
+    // For photos, use description as summary
+    if (metadata.description) {
+      return metadata.description;
+    }
+    
+    // Fallback to content summary
+    if (message.content && message.content.length > 100) {
+      return message.content.substring(0, 97) + '...';
+    }
+    
+    return message.content || 'Processed file content';
+  }
+
+  /**
+   * Extract tags from processing metadata and content
+   */
+  private extractTags(message: ProcessedMessage, metadata: any): string[] {
+    const tags: string[] = [];
+    
+    // Add processor type as tag
+    if (metadata.processor) {
+      tags.push(metadata.processor);
+    }
+    
+    // Add content type as tag
+    if (metadata.contentType) {
+      tags.push(metadata.contentType);
+    }
+    
+    // Add file type based on mime type
+    if (message.fileReference?.mimeType) {
+      const mimeType = message.fileReference.mimeType;
+      if (mimeType.startsWith('image/')) tags.push('image');
+      if (mimeType.startsWith('audio/')) tags.push('audio');
+      if (mimeType.startsWith('video/')) tags.push('video');
+      if (mimeType.includes('pdf')) tags.push('pdf');
+      if (mimeType.includes('document')) tags.push('document');
+    }
+    
+    // Add message type as tag
+    tags.push(message.messageType);
+    
+    return [...new Set(tags)]; // Remove duplicates
   }
 
   /**

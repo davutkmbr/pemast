@@ -71,9 +71,6 @@ export class ResponseFormatter {
                  `Image analysis will be implemented soon!`;
         }
       
-      case 'photo_analysis':
-        return `📸 **Photo analysis completed**\n\n${content}`;
-      
       default:
         return `❓ **Unknown message type:** "${content}"`;
     }

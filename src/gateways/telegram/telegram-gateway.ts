@@ -4,13 +4,11 @@ import { message } from 'telegraf/filters';
 import { BaseGateway, type GatewayConfig } from '../base-gateway.js';
 import { MessageRouter } from '../message-router.js';
 import { TelegramExtractor } from './telegram-extractor.js';
-import { MessageProcessingService } from '../../services/message-processing.service.js';
 import type { MessageProcessor } from '../types.js';
 
 export class TelegramGateway extends BaseGateway {
   private bot: Telegraf;
   private messageRouter: MessageRouter;
-  private messageProcessingService: MessageProcessingService;
   private telegramExtractor: TelegramExtractor;
   private status: 'starting' | 'running' | 'stopping' | 'stopped' = 'stopped';
 
@@ -23,9 +21,6 @@ export class TelegramGateway extends BaseGateway {
     
     // Create message router with Telegram extractor
     this.messageRouter = new MessageRouter(this.telegramExtractor);
-    
-    // Initialize generic message processing service
-    this.messageProcessingService = new MessageProcessingService();
     
     this.setupHandlers();
   }
@@ -83,11 +78,8 @@ export class TelegramGateway extends BaseGateway {
     try {
       ctx.sendChatAction('typing');
       
-      // Process message for AI response
+      // Process message and save to database (single flow)
       const response = await this.messageRouter.routeMessage(ctx, messageType);
-      
-      // Process message for database storage
-      await this.saveMessageToDatabase(ctx, messageType);
       
       // Send response to user
       await this.sendMessage(ctx, response);
@@ -95,32 +87,6 @@ export class TelegramGateway extends BaseGateway {
     } catch (error) {
       console.error('Error handling message:', error);
       await this.sendMessage(ctx, 'Sorry, I encountered an error processing your message.');
-    }
-  }
-
-  /**
-   * Save message to database using the modern pipeline
-   */
-  private async saveMessageToDatabase(ctx: Context, messageType: string) {
-    try {
-      // Extract message and user context
-      const processedMessage = await this.telegramExtractor.extractMessage(ctx, messageType);
-      const userContext = this.telegramExtractor.extractUserContext(ctx);
-      
-      // Save to database using generic service
-      const result = await this.messageProcessingService.processMessage(
-        processedMessage,
-        userContext,
-        'telegram'
-      );
-      
-      if (result.success) {
-        console.log(`💾 Message saved to database: ${result.messageId}`);
-      } else {
-        console.error(`❌ Failed to save message: ${result.error}`);
-      }
-    } catch (error) {
-      console.error('Error saving message to database:', error);
     }
   }
 

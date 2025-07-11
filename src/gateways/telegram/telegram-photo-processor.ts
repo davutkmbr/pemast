@@ -2,6 +2,7 @@ import type { Context } from 'telegraf';
 import type { MessageProcessor } from '../types.js';
 import type { ProcessedMessage, FileReference } from '../../types/index.js';
 import { PhotoProcessor, type ImageFile } from '../../processors/photo.processor.js';
+import { FileService } from '../../services/file.service.js';
 
 export interface TelegramPhotoProcessorConfig {
   photoProcessor: PhotoProcessor;
@@ -11,10 +12,12 @@ export interface TelegramPhotoProcessorConfig {
 export class TelegramPhotoProcessor implements MessageProcessor {
   private photoProcessor: PhotoProcessor;
   private telegramBotToken: string;
+  private fileService: FileService;
 
   constructor(config: TelegramPhotoProcessorConfig) {
     this.photoProcessor = config.photoProcessor;
     this.telegramBotToken = config.telegramBotToken;
+    this.fileService = new FileService();
   }
 
   async processMessage(ctx: Context): Promise<ProcessedMessage> {
@@ -44,6 +47,9 @@ export class TelegramPhotoProcessor implements MessageProcessor {
       // Download the photo from Telegram
       const imageFile = await this.downloadTelegramPhoto(fileId, fileName, fileSize);
       
+      // Store the file in database and get fileId
+      const storedFileId = await this.storePhotoFile(imageFile, fileId);
+      
       // Analyze using the generic photo processor
       const photoResult = await this.photoProcessor.analyzeImage(imageFile);
       
@@ -59,13 +65,14 @@ export class TelegramPhotoProcessor implements MessageProcessor {
       // Return modern ProcessedMessage with analysis
       return {
         content: photoResult.summary || caption || '[Photo analyzed]',
-        messageType: 'photo_analysis', // Use photo_analysis to indicate it was processed
+        messageType: 'photo', // Photo messages now directly trigger memory creation
         gatewayType: 'telegram',
         gatewayMessageId: message.message_id.toString(),
         timestamp: new Date(message.date * 1000),
         fileReference,
         processingMetadata: {
           processor: 'photo',
+          fileId: storedFileId, // Include fileId for memory linking
           contentType: photoResult.contentType,
           summary: photoResult.summary,
           description: photoResult.description,
@@ -73,6 +80,8 @@ export class TelegramPhotoProcessor implements MessageProcessor {
           keyInsights: photoResult.keyInsights,
           confidence: photoResult.confidence,
           originalCaption: caption,
+          imageSize: fileSize,
+          processingTimestamp: new Date().toISOString(),
         },
         processingStatus: 'completed',
       };
@@ -103,6 +112,29 @@ export class TelegramPhotoProcessor implements MessageProcessor {
         },
         processingStatus: 'failed',
       };
+    }
+  }
+
+  /**
+   * Store photo file in database and upload to Supabase Storage
+   */
+  private async storePhotoFile(imageFile: ImageFile, telegramFileId: string): Promise<string> {
+    try {
+      const fileId = await this.fileService.createFileWithUpload(
+        imageFile.fileName,
+        imageFile.buffer,
+        imageFile.mimeType,
+        'photo',
+        telegramFileId,
+        'telegram'
+      );
+      
+      console.log(`✅ Photo file uploaded and stored: ${fileId} (${imageFile.fileName})`);
+      
+      return fileId;
+    } catch (error) {
+      console.error('Error storing photo file:', error);
+      throw new Error(`Failed to store photo file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

@@ -90,4 +90,42 @@ export interface NewFile {
 }
 
 // === Query Results with Relations ===
-export type MessageWithRelations = DBMessageWithRelations; 
+export type MessageWithRelations = DBMessageWithRelations;
+
+// === Memory Types ===
+export interface Memory {
+  id: string;
+  projectId: string | null;
+  userId: string | null;
+  messageId: string | null;
+  content: string;
+  summary?: string | null;
+  embedding?: number[] | null;
+  fileId?: string | null;
+  metadata?: Record<string, any> | null;
+  tags?: string[] | null;
+  createdAt?: Date | null;
+  updatedAt?: Date | null;
+}
+
+export interface MemoryWithRelations extends Memory {
+  user?: any;
+  project?: any;
+  message?: any;
+  file?: any;
+}
+
+export interface CreateMemoryInput {
+  messageId: string;
+  content: string;
+  summary?: string;
+  fileId?: string;
+  metadata?: Record<string, any>;
+  tags?: string[];
+}
+
+export interface VectorSearchResult<T> {
+  item: T;
+  similarity: number;
+  distance: number;
+} 

@@ -2,6 +2,7 @@ import type { Context } from 'telegraf';
 import type { MessageProcessor } from '../types.js';
 import type { ProcessedMessage, FileReference } from '../../types/index.js';
 import { TranscriptProcessor, type AudioFile } from '../../processors/transcript.processor.js';
+import { FileService } from '../../services/file.service.js';
 
 export interface TelegramVoiceProcessorConfig {
   transcriptProcessor: TranscriptProcessor;
@@ -11,10 +12,12 @@ export interface TelegramVoiceProcessorConfig {
 export class TelegramVoiceProcessor implements MessageProcessor {
   private transcriptProcessor: TranscriptProcessor;
   private telegramBotToken: string;
+  private fileService: FileService;
 
   constructor(config: TelegramVoiceProcessorConfig) {
     this.transcriptProcessor = config.transcriptProcessor;
     this.telegramBotToken = config.telegramBotToken;
+    this.fileService = new FileService();
   }
 
   async processMessage(ctx: Context): Promise<ProcessedMessage> {
@@ -47,6 +50,9 @@ export class TelegramVoiceProcessor implements MessageProcessor {
       // Download the audio file from Telegram
       const audioFile = await this.downloadTelegramAudio(fileId, fileName, mimeType, duration);
       
+      // Store the file in database and get fileId
+      const storedFileId = await this.storeVoiceFile(audioFile, fileId);
+      
       // Transcribe using the generic processor
       const transcriptResult = await this.transcriptProcessor.transcribeAudio(audioFile);
       
@@ -59,18 +65,23 @@ export class TelegramVoiceProcessor implements MessageProcessor {
       };
 
       // Return modern ProcessedMessage with transcription
+      // NOTE: messageType is 'voice', so NO memory will be created
+      // Only the transcript text goes into messages.content
       return {
         content: transcriptResult.text || '[Voice message - transcription failed]',
-        messageType: 'voice',
+        messageType: 'voice', // This will NOT trigger memory creation
         gatewayType: 'telegram',
         gatewayMessageId: message.message_id.toString(),
         timestamp: new Date(message.date * 1000),
         fileReference,
         processingMetadata: {
           processor: 'transcript',
+          fileId: storedFileId, // Store fileId for reference
           duration: transcriptResult.duration,
           transcriptionLength: transcriptResult.text.length,
           confidence: transcriptResult.confidence,
+          audioMimeType: mimeType,
+          processingTimestamp: new Date().toISOString(),
         },
         processingStatus: transcriptResult.error ? 'failed' : 'completed',
       };
@@ -100,6 +111,29 @@ export class TelegramVoiceProcessor implements MessageProcessor {
         },
         processingStatus: 'failed',
       };
+    }
+  }
+
+  /**
+   * Store voice file in database and upload to Supabase Storage
+   */
+  private async storeVoiceFile(audioFile: AudioFile, telegramFileId: string): Promise<string> {
+    try {
+      const fileId = await this.fileService.createFileWithUpload(
+        audioFile.fileName,
+        audioFile.buffer,
+        audioFile.mimeType,
+        'voice',
+        telegramFileId,
+        'telegram'
+      );
+      
+      console.log(`✅ Voice file uploaded and stored: ${fileId} (${audioFile.fileName})`);
+      
+      return fileId;
+    } catch (error) {
+      console.error('Error storing voice file:', error);
+      throw new Error(`Failed to store voice file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

@@ -1,33 +1,33 @@
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { messages, files, users, channels, projects } from '../db/schema.js';
+import { messages, users, channels, projects } from '../db/schema.js';
 import type { 
   ProcessedMessage, 
   DatabaseContext, 
-  FileStorageResult,
-  NewMessage,
-  NewFile,
   MessageWithRelations,
   GatewayType 
 } from '../types/index.js';
 
 /**
- * Service for managing messages and their associated files
+ * Service for managing messages in the database
+ * File uploads are handled by processors
  */
 export class MessageService {
   
   /**
    * Save a processed message to the database
+   * File creation is handled by processors, we just use the fileId from metadata
    */
   async saveMessage(
     processedMessage: ProcessedMessage, 
     context: DatabaseContext
   ): Promise<string> {
     try {
-      // First, handle file upload if present
-      let fileId: string | undefined;
-      if (processedMessage.fileReference) {
-        fileId = await this.saveFile(processedMessage.fileReference, context);
+      // Get fileId from processor metadata (processors handle file creation)
+      const fileId = processedMessage.processingMetadata?.fileId || undefined;
+      
+      if (fileId) {
+        console.log(`✅ Using processor-created file: ${fileId}`);
       }
 
       // Insert the message
@@ -53,39 +53,6 @@ export class MessageService {
     } catch (error) {
       console.error('Error saving message:', error);
       throw new Error(`Failed to save message: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Save file metadata to database
-   */
-  private async saveFile(
-    fileReference: ProcessedMessage['fileReference'], 
-    context: DatabaseContext
-  ): Promise<string> {
-    if (!fileReference) {
-      throw new Error('File reference is required');
-    }
-
-    try {
-      const [savedFile] = await db.insert(files).values({
-        originalName: fileReference.fileName,
-        mimeType: fileReference.mimeType,
-        fileSize: fileReference.fileSize,
-        fileType: this.inferFileType(fileReference.mimeType),
-        gatewayFileId: fileReference.id,
-        gatewayType: fileReference.gateway,
-        // storagePath will be set when file is actually stored
-      }).returning({ id: files.id });
-
-      if (!savedFile) {
-        throw new Error('Failed to save file - no result returned');
-      }
-
-      return savedFile.id;
-    } catch (error) {
-      console.error('Error saving file metadata:', error);
-      throw new Error(`Failed to save file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -171,26 +138,6 @@ export class MessageService {
   }
 
   /**
-   * Update file storage path after upload
-   */
-  async updateFileStoragePath(
-    fileId: string, 
-    storagePath: string
-  ): Promise<void> {
-    try {
-      await db.update(files)
-        .set({ 
-          storagePath,
-          isProcessed: true,
-        })
-        .where(eq(files.id, fileId));
-    } catch (error) {
-      console.error('Error updating file storage path:', error);
-      throw new Error(`Failed to update file: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
    * Get conversation context (recent messages)
    */
   async getConversationContext(
@@ -226,17 +173,5 @@ export class MessageService {
       console.error('Error fetching conversation context:', error);
       throw new Error(`Failed to fetch context: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }
-
-  /**
-   * Infer file type from MIME type
-   */
-  private inferFileType(mimeType: string): 'text' | 'voice' | 'document' | 'photo' | 'video' | 'audio' {
-    if (mimeType.startsWith('image/')) return 'photo';
-    if (mimeType.startsWith('audio/')) return 'audio';
-    if (mimeType.startsWith('video/')) return 'video';
-    if (mimeType.includes('pdf') || mimeType.includes('document')) return 'document';
-    if (mimeType.includes('text/')) return 'text';
-    return 'document'; // Default fallback
   }
 } 

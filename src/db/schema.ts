@@ -6,7 +6,7 @@ import { relations } from 'drizzle-orm';
 // === ENUMS ===
 export const roleEnum = pgEnum('role', ['owner', 'member']);
 export const gatewayTypeEnum = pgEnum('gateway_type', ['telegram', 'slack', 'discord', 'whatsapp']);
-export const messageTypeEnum = pgEnum('message_type', ['text', 'voice', 'document', 'photo', 'photo_analysis']);
+export const messageTypeEnum = pgEnum('message_type', ['text', 'voice', 'document', 'photo']);
 export const fileTypeEnum = pgEnum('file_type', ['text', 'voice', 'document', 'photo', 'video', 'audio']);
 export const processingStatusEnum = pgEnum('processing_status', ['pending', 'processing', 'completed', 'failed']);
 export const recurrenceTypeEnum = pgEnum('recurrence_type', ['none', 'daily', 'weekly', 'monthly', 'yearly']);

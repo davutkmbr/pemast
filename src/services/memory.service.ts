@@ -132,16 +132,6 @@ export class MemoryService {
       // Generate embedding for the search query
       const queryEmbedding = await embeddingService.generateEmbedding(query);
 
-      if (queryEmbedding.length === 0) {
-        // Fallback to text search if embedding generation fails
-        return this.searchMemoriesByText(query, userId, projectId, limit)
-          .then(results => results.map(item => ({
-            item,
-            similarity: 0.5,
-            distance: 0.5
-          })));
-      }
-
       // Use generic vector search helper
       const vectorResults = await vectorSearch<Memory>({
         table: memories,

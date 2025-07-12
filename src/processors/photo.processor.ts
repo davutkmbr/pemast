@@ -1,8 +1,9 @@
-import OpenAI from 'openai';
-import { z } from 'zod';
+import OpenAI from "openai";
+import { z } from "zod";
 
 export interface PhotoConfig {
   openaiApiKey: string;
+  model?: string;
 }
 
 export interface ImageFile {
@@ -14,11 +15,22 @@ export interface ImageFile {
 
 // Zod schema for structured output validation
 const PhotoAnalysisSchema = z.object({
-  contentType: z.string().describe('Type of content (document, photo, chart, whiteboard, screenshot, etc.)'),
-  extractedText: z.string().nullable().describe('All readable text from the image. If no text found, return null'),
-  description: z.string().describe('Clear description of what is visible in the image'),
-  keyInsights: z.array(z.string()).describe('3-5 most important points or insights about this image'),
-  summary: z.string().describe('Concise summary that would help someone find this image later by describing its content, purpose, and key elements'),
+  contentType: z
+    .string()
+    .describe("Type of content (document, photo, chart, whiteboard, screenshot, etc.)"),
+  extractedText: z
+    .string()
+    .nullable()
+    .describe("All readable text from the image. If no text found, return null"),
+  description: z.string().describe("Clear description of what is visible in the image"),
+  keyInsights: z
+    .array(z.string())
+    .describe("3-5 most important points or insights about this image"),
+  summary: z
+    .string()
+    .describe(
+      "Concise summary that would help someone find this image later by describing its content, purpose, and key elements",
+    ),
 });
 
 export type PhotoResult = z.infer<typeof PhotoAnalysisSchema> & {
@@ -28,23 +40,31 @@ export type PhotoResult = z.infer<typeof PhotoAnalysisSchema> & {
 
 export class PhotoProcessor {
   private openai: OpenAI;
+  private model: string;
 
   constructor(config: PhotoConfig) {
     this.openai = new OpenAI({
       apiKey: config.openaiApiKey,
     });
+
+    const model = config.model ?? process.env.UTILITY_MODEL;
+    if (!model) {
+      throw new Error("PhotoProcessor: model is not set");
+    }
+
+    this.model = model;
   }
 
   async analyzeImage(imageFile: ImageFile): Promise<PhotoResult> {
     try {
       console.log(`Analyzing image: ${imageFile.fileName} (${imageFile.mimeType})`);
-      
+
       // Convert ArrayBuffer to base64 for OpenAI API
       const base64Image = this.arrayBufferToBase64(imageFile.buffer);
-      
+
       // Vision models don't support structured outputs, so we use text formatting
       const response = await this.openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: this.model,
         messages: [
           {
             role: "system",
@@ -89,49 +109,50 @@ DO NOT include any text outside the JSON object.`,
             content: [
               {
                 type: "text",
-                text: "Analyze this image and provide structured information about it."
+                text: "Analyze this image and provide structured information about it.",
               },
               {
                 type: "image_url",
                 image_url: {
                   url: `data:${imageFile.mimeType};base64,${base64Image}`,
-                  detail: "high"
-                }
-              }
-            ]
-          }
+                  detail: "high",
+                },
+              },
+            ],
+          },
         ],
         max_tokens: 1500,
         temperature: 0.1,
       });
-      
+
       const content = response.choices[0]?.message?.content;
       if (!content) {
-        throw new Error('Empty response from vision analysis');
+        throw new Error("Empty response from vision analysis");
       }
-      
+
       // Clean and parse the JSON response
       const analysis = this.parseVisionResponse(content);
-      
-      console.log(`✅ Successfully analyzed image: ${analysis.contentType} - "${analysis.summary.substring(0, 100)}..."`);
-      
+
+      console.log(
+        `✅ Successfully analyzed image: ${analysis.contentType} - "${analysis.summary.substring(0, 100)}..."`,
+      );
+
       return {
         ...analysis,
         confidence: 0.9, // Vision analysis generally reliable
         error: undefined,
       };
-      
     } catch (error) {
-      console.error('❌ Image analysis error:', error);
-      
+      console.error("❌ Image analysis error:", error);
+
       return {
-        contentType: 'unknown',
+        contentType: "unknown",
         extractedText: null,
-        description: 'Failed to analyze image',
+        description: "Failed to analyze image",
         keyInsights: [],
-        summary: '[Image analysis failed]',
+        summary: "[Image analysis failed]",
         confidence: undefined,
-        error: error instanceof Error ? error.message : 'Unknown image analysis error',
+        error: error instanceof Error ? error.message : "Unknown image analysis error",
       };
     }
   }
@@ -140,21 +161,20 @@ DO NOT include any text outside the JSON object.`,
     try {
       // Clean the response - remove any markdown formatting
       const cleanContent = content
-        .replace(/```json\n?/g, '')
-        .replace(/```\n?/g, '')
+        .replace(/```json\n?/g, "")
+        .replace(/```\n?/g, "")
         .trim();
-      
+
       // Parse JSON
       const parsed = JSON.parse(cleanContent);
-      
+
       // Validate with Zod schema
       const validated = PhotoAnalysisSchema.parse(parsed);
-      
+
       return validated;
-      
     } catch (parseError) {
-      console.warn('Failed to parse vision response as JSON:', parseError);
-      
+      console.warn("Failed to parse vision response as JSON:", parseError);
+
       // Fallback: extract information from unstructured text
       return this.extractFromUnstructuredText(content);
     }
@@ -163,10 +183,11 @@ DO NOT include any text outside the JSON object.`,
   private extractFromUnstructuredText(content: string): z.infer<typeof PhotoAnalysisSchema> {
     // Fallback parsing for when JSON parsing fails
     const text = content.trim();
-    
+
     return {
-      contentType: 'unknown',
-      extractedText: text.includes('no text') || text.includes('No text') ? null : text.substring(0, 500),
+      contentType: "unknown",
+      extractedText:
+        text.includes("no text") || text.includes("No text") ? null : text.substring(0, 500),
       description: text.substring(0, 300),
       keyInsights: [text.substring(0, 100)],
       summary: text.substring(0, 200),
@@ -175,7 +196,7 @@ DO NOT include any text outside the JSON object.`,
 
   private arrayBufferToBase64(buffer: ArrayBuffer): string {
     const bytes = new Uint8Array(buffer);
-    let binary = '';
+    let binary = "";
     for (let i = 0; i < bytes.byteLength; i++) {
       binary += String.fromCharCode(bytes[i]!);
     }
@@ -185,15 +206,15 @@ DO NOT include any text outside the JSON object.`,
   // Utility method to check if a file type is supported
   isImageFile(mimeType: string): boolean {
     const supportedTypes = [
-      'image/jpeg',     // JPEG
-      'image/jpg',      // JPG
-      'image/png',      // PNG
-      'image/gif',      // GIF
-      'image/webp',     // WebP
-      'image/bmp',      // BMP
-      'image/tiff',     // TIFF
+      "image/jpeg", // JPEG
+      "image/jpg", // JPG
+      "image/png", // PNG
+      "image/gif", // GIF
+      "image/webp", // WebP
+      "image/bmp", // BMP
+      "image/tiff", // TIFF
     ];
-    
+
     return supportedTypes.includes(mimeType.toLowerCase());
   }
 
@@ -201,4 +222,4 @@ DO NOT include any text outside the JSON object.`,
   getMaxFileSize(): number {
     return 20 * 1024 * 1024; // 20MB in bytes
   }
-} 
+}

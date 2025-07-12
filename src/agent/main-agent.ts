@@ -1,25 +1,27 @@
 import { Agent, webSearchTool } from "@openai/agents";
-import { storeMemoryTool } from "./tools/store-memory.tool.js";
-import { searchMemoryTool } from "./tools/search-memory.tool.js";
-import { readFile } from "../utils/read-file.js";
 import { buildSystemPrompt } from "../utils/prompts.js";
+import { readFile } from "../utils/read-file.js";
+import { fileRetrieverTool } from "./tools/file-retriever.tool.js";
+import { searchMemoryTool } from "./tools/search-memory.tool.js";
+import { storeMemoryTool } from "./tools/store-memory.tool.js";
 
 async function createMainAgent(personalContext?: string) {
-  const baseInstructions = await readFile('prompts/main-agent.md');
+  const baseInstructions = await readFile("prompts/main-agent.md");
   const instructions = buildSystemPrompt(baseInstructions, personalContext);
+
+  const model = process.env.MAIN_MODEL;
+  if (!model) {
+    throw new Error("MAIN_MODEL is not set");
+  }
 
   return new Agent({
     name: "main-agent",
-    model: "gpt-4.1",
+    model,
     modelSettings: {
       parallelToolCalls: true,
     },
     instructions,
-    tools: [
-      searchMemoryTool,
-      storeMemoryTool,
-      webSearchTool()
-    ]
+    tools: [searchMemoryTool, storeMemoryTool, fileRetrieverTool],
   });
 }
 

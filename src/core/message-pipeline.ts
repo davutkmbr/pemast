@@ -1,6 +1,7 @@
 import type { 
   ProcessedMessage, 
   DatabaseContext, 
+  GatewayContext,
   UserContext,
   MessageProcessingResult,
   GatewayType 
@@ -30,11 +31,11 @@ export interface MessagePipeline {
 export interface ReplyGenerator {
   generateReply(
     messageContent: string,
-    context: DatabaseContext,
+    context: DatabaseContext | GatewayContext,
     options?: { limit?: number }
   ): Promise<string>;
   
-  generatePhotoAck(processedMessage: ProcessedMessage, context: DatabaseContext): Promise<string>;
+  generatePhotoAck(processedMessage: ProcessedMessage, context: DatabaseContext | GatewayContext): Promise<string>;
 }
 
 /**

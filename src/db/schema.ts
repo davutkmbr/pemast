@@ -1,94 +1,126 @@
+import { relations } from "drizzle-orm";
 import {
-  pgTable, pgEnum, uuid, text, timestamp, integer, real, vector, jsonb, boolean, primaryKey
-} from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+  boolean,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  real,
+  text,
+  timestamp,
+  uuid,
+  vector,
+} from "drizzle-orm/pg-core";
 
 // === ENUMS ===
-export const roleEnum = pgEnum('role', ['owner', 'member']);
-export const gatewayTypeEnum = pgEnum('gateway_type', ['telegram', 'slack', 'discord', 'whatsapp']);
-export const messageTypeEnum = pgEnum('message_type', ['text', 'voice', 'document', 'photo']);
-export const fileTypeEnum = pgEnum('file_type', ['text', 'voice', 'document', 'photo', 'video', 'audio']);
-export const processingStatusEnum = pgEnum('processing_status', ['pending', 'processing', 'completed', 'failed']);
-export const recurrenceTypeEnum = pgEnum('recurrence_type', ['none', 'daily', 'weekly', 'monthly', 'yearly']);
-export const messageRoleEnum = pgEnum('message_role', ['user', 'assistant']);
+export const roleEnum = pgEnum("role", ["owner", "member"]);
+export const gatewayTypeEnum = pgEnum("gateway_type", ["telegram", "slack", "discord", "whatsapp"]);
+export const messageTypeEnum = pgEnum("message_type", ["text", "voice", "document", "photo"]);
+export const fileTypeEnum = pgEnum("file_type", [
+  "text",
+  "voice",
+  "document",
+  "photo",
+  "video",
+  "audio",
+]);
+export const processingStatusEnum = pgEnum("processing_status", [
+  "pending",
+  "processing",
+  "completed",
+  "failed",
+]);
+export const recurrenceTypeEnum = pgEnum("recurrence_type", [
+  "none",
+  "daily",
+  "weekly",
+  "monthly",
+  "yearly",
+]);
+export const messageRoleEnum = pgEnum("message_role", ["user", "assistant"]);
 
 // === CORE TABLES ===
-export const projects = pgTable('projects', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  name: text('name').notNull(),
-  description: text('description'),
-  isActive: boolean('is_active').default(true),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
+export const projects = pgTable("projects", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const users = pgTable('users', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  externalId: text('external_id'), // Gateway-specific user ID
-  displayName: text('display_name'),
-  email: text('email'),
-  isActive: boolean('is_active').default(true),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
+export const users = pgTable("users", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  externalId: text("external_id"), // Gateway-specific user ID
+  displayName: text("display_name"),
+  email: text("email"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const projectMembers = pgTable('project_members', {
-  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  role: roleEnum('role').default('member'),
-  joinedAt: timestamp('joined_at').defaultNow(),
-}, (t) => ({
-  pk: primaryKey({ columns: [t.projectId, t.userId] }),
-}));
+export const projectMembers = pgTable(
+  "project_members",
+  {
+    projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    role: roleEnum("role").default("member"),
+    joinedAt: timestamp("joined_at").defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.projectId, t.userId] }),
+  }),
+);
 
-export const channels = pgTable('channels', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
-  gatewayType: gatewayTypeEnum('gateway_type').notNull(),
-  externalChatId: text('external_chat_id').notNull(), // Gateway-specific chat ID
-  name: text('name'),
-  isActive: boolean('is_active').default(true),
-  createdAt: timestamp('created_at').defaultNow(),
+export const channels = pgTable("channels", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  gatewayType: gatewayTypeEnum("gateway_type").notNull(),
+  externalChatId: text("external_chat_id").notNull(), // Gateway-specific chat ID
+  name: text("name"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // === FILES TABLE (Normalized) ===
-export const files = pgTable('files', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  originalName: text('original_name').notNull(),
-  storagePath: text('storage_path'), // Supabase Storage path
-  mimeType: text('mime_type').notNull(),
-  fileSize: integer('file_size'),
-  fileType: fileTypeEnum('file_type').notNull(),
-  gatewayFileId: text('gateway_file_id'), // Original platform file ID
-  gatewayType: gatewayTypeEnum('gateway_type'),
-  checksum: text('checksum'), // For deduplication
-  isProcessed: boolean('is_processed').default(false),
-  createdAt: timestamp('created_at').defaultNow(),
+export const files = pgTable("files", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  originalName: text("original_name").notNull(),
+  storagePath: text("storage_path"), // Supabase Storage path
+  mimeType: text("mime_type").notNull(),
+  fileSize: integer("file_size"),
+  fileType: fileTypeEnum("file_type").notNull(),
+  gatewayFileId: text("gateway_file_id"), // Original platform file ID
+  gatewayType: gatewayTypeEnum("gateway_type"),
+  checksum: text("checksum"), // For deduplication
+  isProcessed: boolean("is_processed").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // === MESSAGES TABLE (Core conversation data) ===
-export const messages = pgTable('messages', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  channelId: uuid('channel_id').references(() => channels.id, { onDelete: 'cascade' }),
+export const messages = pgTable("messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+  channelId: uuid("channel_id").references(() => channels.id, { onDelete: "cascade" }),
 
   // Role in the conversation (user / assistant)
-  role: messageRoleEnum('role').default('user'),
+  role: messageRoleEnum("role").default("user"),
 
   // Message content
-  messageType: messageTypeEnum('message_type').notNull(),
-  content: text('content').notNull(), // Main text content
+  messageType: messageTypeEnum("message_type").notNull(),
+  content: text("content").notNull(), // Main text content
 
   // Gateway-specific data
-  gatewayType: gatewayTypeEnum('gateway_type').notNull(),
-  gatewayMessageId: text('gateway_message_id').notNull(), // Platform-specific message ID
+  gatewayType: gatewayTypeEnum("gateway_type").notNull(),
+  gatewayMessageId: text("gateway_message_id").notNull(), // Platform-specific message ID
 
   // File attachment (optional)
-  fileId: uuid('file_id').references(() => files.id, { onDelete: 'set null' }),
+  fileId: uuid("file_id").references(() => files.id, { onDelete: "set null" }),
 
   // Processing metadata (flexible JSON)
-  processingMetadata: jsonb('processing_metadata').$type<{
+  processingMetadata: jsonb("processing_metadata").$type<{
     processor?: string;
     duration?: number;
     confidence?: number;
@@ -100,81 +132,81 @@ export const messages = pgTable('messages', {
   }>(),
 
   // Status tracking
-  processingStatus: processingStatusEnum('processing_status').default('completed'),
+  processingStatus: processingStatusEnum("processing_status").default("completed"),
 
   // Thread/reply support
-  parentMessageId: uuid('parent_message_id'), // Self-reference to messages.id
-  threadId: uuid('thread_id'), // For grouping related messages
+  parentMessageId: uuid("parent_message_id"), // Self-reference to messages.id
+  threadId: uuid("thread_id"), // For grouping related messages
 
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // === DATA TABLES ===
-export const reminders = pgTable('reminders', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  messageId: uuid('message_id').references(() => messages.id, { onDelete: 'cascade' }), // Source message
-  content: text('content').notNull(),
-  scheduledFor: timestamp('scheduled_for').notNull(),
+export const reminders = pgTable("reminders", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+  messageId: uuid("message_id").references(() => messages.id, { onDelete: "cascade" }), // Source message
+  content: text("content").notNull(),
+  scheduledFor: timestamp("scheduled_for").notNull(),
 
   // Semantic search support
-  embedding: vector('embedding', { dimensions: 1536 }), // For semantic search
-  tags: text('tags').array(), // For categorization ["birthday", "friend", "fettah"]
-  summary: text('summary'), // Brief description for better search
+  embedding: vector("embedding", { dimensions: 1536 }), // For semantic search
+  tags: text("tags").array(), // For categorization ["birthday", "friend", "fettah"]
+  summary: text("summary"), // Brief description for better search
 
   // Recurrence support
-  recurrenceType: recurrenceTypeEnum('recurrence_type').default('none'),
-  recurrenceInterval: integer('recurrence_interval').default(1), // Every N intervals (e.g., every 2 weeks)
-  recurrenceEndDate: timestamp('recurrence_end_date'), // When to stop creating recurring instances
-  isRecurring: boolean('is_recurring').default(false),
+  recurrenceType: recurrenceTypeEnum("recurrence_type").default("none"),
+  recurrenceInterval: integer("recurrence_interval").default(1), // Every N intervals (e.g., every 2 weeks)
+  recurrenceEndDate: timestamp("recurrence_end_date"), // When to stop creating recurring instances
+  isRecurring: boolean("is_recurring").default(false),
 
   // Status tracking
-  isCompleted: boolean('is_completed').default(false),
-  completedAt: timestamp('completed_at'),
-  createdAt: timestamp('created_at').defaultNow(),
+  isCompleted: boolean("is_completed").default(false),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const memories = pgTable('memories', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  messageId: uuid('message_id').references(() => messages.id, { onDelete: 'cascade' }), // Source message
+export const memories = pgTable("memories", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+  messageId: uuid("message_id").references(() => messages.id, { onDelete: "cascade" }), // Source message
 
   // Content data
-  content: text('content').notNull(),
-  summary: text('summary'),
-  embedding: vector('embedding', { dimensions: 1536 }),
+  content: text("content").notNull(),
+  summary: text("summary"),
+  embedding: vector("embedding", { dimensions: 1536 }),
 
   // File reference
-  fileId: uuid('file_id').references(() => files.id, { onDelete: 'set null' }),
+  fileId: uuid("file_id").references(() => files.id, { onDelete: "set null" }),
 
   // Metadata
-  metadata: jsonb('metadata').$type<Record<string, any>>(),
-  tags: text('tags').array(), // For categorization
+  metadata: jsonb("metadata").$type<Record<string, any>>(),
+  tags: text("tags").array(), // For categorization
 
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const facts = pgTable('facts', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  messageId: uuid('message_id').references(() => messages.id, { onDelete: 'cascade' }), // Source message
+export const facts = pgTable("facts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+  messageId: uuid("message_id").references(() => messages.id, { onDelete: "cascade" }), // Source message
 
-  keyText: text('key_text').notNull(),
-  valueText: text('value_text').notNull(),
-  embedding: vector('embedding', { dimensions: 1536 }),
-  confidence: real('confidence').default(1.0),
+  keyText: text("key_text").notNull(),
+  valueText: text("value_text").notNull(),
+  embedding: vector("embedding", { dimensions: 1536 }),
+  confidence: real("confidence").default(1.0),
 
   // For fact updates/versioning
-  previousFactId: uuid('previous_fact_id'), // Self-reference to facts.id
-  isActive: boolean('is_active').default(true),
+  previousFactId: uuid("previous_fact_id"), // Self-reference to facts.id
+  isActive: boolean("is_active").default(true),
 
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // === RELATIONS ===
@@ -238,4 +270,4 @@ export const remindersRelations = relations(reminders, ({ one }) => ({
   message: one(messages, { fields: [reminders.messageId], references: [messages.id] }),
   // Note: Self-referencing relation for parentReminder can be added later if needed
   // It works at the database level but can cause TypeScript circular reference issues
-})); 
+}));

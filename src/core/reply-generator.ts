@@ -2,7 +2,7 @@ import { run, user as userMessage, assistant as assistantMessage, system as syst
 import { mainAgent } from "../agent/main-agent.js";
 import { MessageService } from "../services/message.service.js";
 import { MemoryService } from "../services/memory.service.js";
-import type { DatabaseContext, ProcessedMessage } from "../types/index.js";
+import type { DatabaseContext, GatewayContext, ProcessedMessage } from "../types/index.js";
 import type { ReplyGenerator } from './message-pipeline.js';
 
 /**
@@ -24,23 +24,30 @@ export class CoreReplyGenerator implements ReplyGenerator {
    */
   async generateReply(
     messageContent: string,
-    context: DatabaseContext,
+    context: DatabaseContext | GatewayContext,
     options: { limit?: number } = {}
   ): Promise<string> {
     const limit = options.limit ?? 10;
 
+    // Extract database context (works for both DatabaseContext and GatewayContext)
+    const dbCtx: DatabaseContext = {
+      userId: context.userId,
+      projectId: context.projectId,
+      channelId: context.channelId,
+    };
+
     // Fetch recent conversation history
     const history = await this.messageService.getConversationContext(
-      context.userId,
-      context.projectId,
-      context.channelId,
+      dbCtx.userId,
+      dbCtx.projectId,
+      dbCtx.channelId,
       limit
     );
 
     // Fetch personal context memories
     const personalMemories = await this.memoryService.getPersonalContext(
-      context.userId,
-      context.projectId,
+      dbCtx.userId,
+      dbCtx.projectId,
       15 // Get up to 15 personal context items
     );
 
@@ -67,7 +74,7 @@ export class CoreReplyGenerator implements ReplyGenerator {
     // Append the new message
     inputItems.push(userMessage(messageContent));
 
-    // Run agent without streaming
+    // Run agent without streaming - pass the full context (GatewayContext if available)
     const result = await run(mainAgent, inputItems, { 
       stream: false, 
       context 
@@ -79,14 +86,21 @@ export class CoreReplyGenerator implements ReplyGenerator {
   /**
    * Generate photo acknowledgment with personal context
    */
-  async generatePhotoAck(processedMessage: ProcessedMessage, context: DatabaseContext): Promise<string> {
+  async generatePhotoAck(processedMessage: ProcessedMessage, context: DatabaseContext | GatewayContext): Promise<string> {
+    // Extract database context
+    const dbCtx: DatabaseContext = {
+      userId: context.userId,
+      projectId: context.projectId,
+      channelId: context.channelId,
+    };
+
     const meta = processedMessage.processingMetadata || {};
     const desc = meta.description || meta.summary || processedMessage.content || "Bir fotoğraf";
 
     // Get personal context for more personalized photo response
     const personalMemories = await this.memoryService.getPersonalContext(
-      context.userId,
-      context.projectId,
+      dbCtx.userId,
+      dbCtx.projectId,
       10
     );
 

@@ -1,7 +1,12 @@
-import { tool } from "@openai/agents";
+import { type RunContext, tool } from "@openai/agents";
 import { z } from "zod";
 import { memoryDeduplicationService } from "../../services/memory-deduplication.service.js";
-import { type DatabaseContext, type CreateMemoryInput, CORE_MEMORY_CATEGORIES } from "../../types/index.js";
+import {
+  CORE_MEMORY_CATEGORIES,
+  type CreateMemoryInput,
+  type DatabaseContext,
+  type GatewayContext,
+} from "../../types/index.js";
 import { readFile } from "../../utils/read-file.js";
 
 /**
@@ -9,16 +14,20 @@ import { readFile } from "../../utils/read-file.js";
  * Persists user memories (facts, preferences, notes) so they can be recalled later.
  * The agent should call this when the user explicitly asks to remember something
  * or when the message contains multiple distinct pieces of information.
- * 
+ *
  * IMPORTANT: All content must be stored in English for consistency and better embedding performance.
- * 
+ *
  * SMART DEDUPLICATION: Automatically detects similar existing memories and decides whether to
  * create new memories or update existing ones to prevent duplicates.
  */
 
 // Single memory schema
 const SingleMemoryParams = z.object({
-  content: z.string().describe("Full text to remember in ENGLISH (can be multi-sentence). Translate from user's language if needed."),
+  content: z
+    .string()
+    .describe(
+      "Full text to remember in ENGLISH (can be multi-sentence). Translate from user's language if needed.",
+    ),
   summary: z
     .string()
     .max(160)
@@ -27,113 +36,235 @@ const SingleMemoryParams = z.object({
   tags: z
     .array(z.string())
     .nullish()
-    .describe(`Memory tags in ENGLISH. MUST include at least one core category: ${CORE_MEMORY_CATEGORIES.join(', ')}. Add specific descriptive tags. Example: ['personal_info', 'developer', 'turkey']`),
+    .describe(
+      `Memory tags in ENGLISH. MUST include at least one core category: ${CORE_MEMORY_CATEGORIES.join(", ")}. Add specific descriptive tags. Example: ['personal_info', 'developer', 'turkey']`,
+    ),
 });
 
 // Array of memories for different contexts
 const StoreMemoryParams = z.object({
-  memories: z.array(SingleMemoryParams).min(1).describe("Array of memories with different contexts. Each memory should focus on a single topic or context rather than mixing multiple subjects."),
+  memories: z
+    .array(SingleMemoryParams)
+    .min(1)
+    .describe(
+      "Array of memories with different contexts. Each memory should focus on a single topic or context rather than mixing multiple subjects.",
+    ),
 });
+
+type MemoryValidationResult =
+  | {
+      input: CreateMemoryInput;
+      index: number;
+    }
+  | {
+      error: string;
+      index: number;
+    };
+
+type ProcessingStats = {
+  totalMemories: number;
+  processedCount: number;
+  errorCount: number;
+};
+
+/**
+ * Auto-generates a summary from content if not provided
+ */
+function generateSummary(content: string, providedSummary?: string | null): string {
+  if (providedSummary) return providedSummary;
+  return content.length > 100 ? `${content.slice(0, 97)}…` : content;
+}
+
+/**
+ * Validates and normalizes tags, ensuring at least one core category exists
+ */
+function validateAndNormalizeTags(tags?: string[] | null): { tags: string[]; error?: string } {
+  if (!tags || tags.length === 0) {
+    return { tags: ["note"] };
+  }
+
+  const hasCoreCategory = tags.some((tag: string) => CORE_MEMORY_CATEGORIES.includes(tag as any));
+
+  if (!hasCoreCategory) {
+    return {
+      tags: [],
+      error: `Please include at least one core category: ${CORE_MEMORY_CATEGORIES.join(", ")}`,
+    };
+  }
+
+  return { tags };
+}
+
+/**
+ * Validates and prepares a single memory input
+ */
+function prepareSingleMemory(
+  memoryData: z.infer<typeof SingleMemoryParams>,
+  index: number,
+): MemoryValidationResult {
+  try {
+    const { content } = memoryData;
+    const summary = generateSummary(content, memoryData.summary);
+    const { tags, error } = validateAndNormalizeTags(memoryData.tags);
+
+    if (error) {
+      return { error, index };
+    }
+
+    const input: CreateMemoryInput = {
+      content,
+      summary,
+      tags,
+    } as CreateMemoryInput;
+
+    return { input, index };
+  } catch (error) {
+    return {
+      error: `Validation failed - ${error instanceof Error ? error.message : "Unknown error"}`,
+      index,
+    };
+  }
+}
+
+/**
+ * Prepares multiple memory inputs, separating valid ones from errors
+ */
+function prepareMemoryInputs(memories: z.infer<typeof SingleMemoryParams>[]): {
+  validInputs: CreateMemoryInput[];
+  errors: string[];
+} {
+  const validInputs: CreateMemoryInput[] = [];
+  const errors: string[] = [];
+
+  for (let i = 0; i < memories.length; i++) {
+    const memoryData = memories[i];
+    if (!memoryData) continue;
+
+    const result = prepareSingleMemory(memoryData, i);
+
+    if ("error" in result) {
+      errors.push(`Memory ${result.index + 1}: ❌ ${result.error}`);
+    } else {
+      validInputs.push(result.input);
+    }
+  }
+
+  return { validInputs, errors };
+}
+
+/**
+ * Formats the results from smart deduplication service
+ */
+function formatProcessingResults(smartResults: any[]): string[] {
+  return smartResults.flatMap(({ index, result }) => {
+    const memoryNum = index + 1;
+    const actionEmojiMap = {
+      created: "✅ Created",
+      updated: "🔄 Updated",
+      skipped: "⏭️ Skipped",
+    } as const;
+
+    const action = result.action as keyof typeof actionEmojiMap;
+    const actionEmoji = actionEmojiMap[action] || "❓ Unknown";
+
+    const lines = [
+      `Memory ${memoryNum}: ${actionEmoji} (id: ${result.memoryId}) - ${result.reason}`,
+    ];
+
+    if (result.similarMemories && result.similarMemories.length > 0) {
+      lines.push(`   📎 Found ${result.similarMemories.length} similar existing memories`);
+    }
+
+    return lines;
+  });
+}
+
+/**
+ * Builds the final response message
+ */
+function buildResponse(stats: ProcessingStats, results: string[], errors: string[]): string {
+  const { totalMemories, processedCount, errorCount } = stats;
+
+  let response = `🧠 Smart Memory Processing: ${totalMemories} memories → ${processedCount} processed, ${errorCount} errors\n\n`;
+
+  if (results.length > 0) {
+    response += `✅ ${results.join("\n")}\n`;
+  }
+
+  if (errors.length > 0) {
+    response += `\n❌ Errors:\n${errors.join("\n")}`;
+  }
+
+  return response;
+}
+
+/**
+ * Processes valid memory inputs using the deduplication service
+ */
+async function processMemoriesWithDeduplication(
+  validInputs: CreateMemoryInput[],
+  dbCtx: DatabaseContext,
+): Promise<{ results: string[]; errors: string[] }> {
+  const results: string[] = [];
+  const errors: string[] = [];
+
+  if (validInputs.length === 0) {
+    return { results, errors };
+  }
+
+  try {
+    const smartResults = await memoryDeduplicationService.smartCreateMultipleMemories(
+      validInputs,
+      dbCtx,
+    );
+    const formattedResults = formatProcessingResults(smartResults);
+    results.push(...formattedResults);
+  } catch (error) {
+    errors.push(
+      `Batch processing failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+    );
+  }
+
+  return { results, errors };
+}
 
 export const storeMemoryTool = tool({
   name: "store_memory",
-  description: (await readFile('prompts/store-memory-tool.md'))
-    .replace(/{CORE_CATEGORIES}/g, CORE_MEMORY_CATEGORIES.join(', ')),
+  description: (await readFile("prompts/store-memory-tool.md")).replace(
+    /{CORE_CATEGORIES}/g,
+    CORE_MEMORY_CATEGORIES.join(", "),
+  ),
   parameters: StoreMemoryParams,
   strict: true,
   execute: async (
     data: z.infer<typeof StoreMemoryParams>,
-    context
+    runContext?: RunContext<GatewayContext>,
   ) => {
-    const dbCtx = (context as any)?.context as DatabaseContext | undefined;
-    if (!dbCtx) {
+    const context = runContext?.context;
+    if (!context) {
       return "⚠️ Missing database context; cannot store memory.";
     }
 
-    const results: string[] = [];
-    const errors: string[] = [];
+    // Prepare memory inputs and collect validation errors
+    const { validInputs, errors: validationErrors } = prepareMemoryInputs(data.memories);
 
-    // Prepare memory inputs
-    const memoryInputs: CreateMemoryInput[] = [];
+    // Process valid memories with smart deduplication
+    const { results, errors: processingErrors } = await processMemoriesWithDeduplication(
+      validInputs,
+      context,
+    );
 
-    for (let i = 0; i < data.memories.length; i++) {
-      const memoryData = data.memories[i];
-      if (!memoryData) continue;
-      
-      let { content, summary, tags } = memoryData;
+    // Combine all errors
+    const allErrors = [...validationErrors, ...processingErrors];
 
-      try {
-        // Auto-generate summary if not provided (first 100 chars)
-        if (!summary) {
-          summary = content.length > 100 ? content.slice(0, 97) + "…" : content;
-        }
+    // Build processing stats
+    const stats: ProcessingStats = {
+      totalMemories: data.memories.length,
+      processedCount: validInputs.length,
+      errorCount: allErrors.length,
+    };
 
-        // Validate at least one core category exists
-        if (tags && tags.length > 0) {
-          const hasCoreCategory = tags.some((tag: string) => CORE_MEMORY_CATEGORIES.includes(tag as any));
-          if (!hasCoreCategory) {
-            errors.push(`Memory ${i + 1}: Please include at least one core category: ${CORE_MEMORY_CATEGORIES.join(', ')}`);
-            continue;
-          }
-        } else {
-          // If no tags provided, add a default 'note' category
-          tags = ['note'];
-        }
-
-        const input: CreateMemoryInput = {
-          // messageId can be omitted when the memory isn't tied to a specific message
-          content,
-          summary,
-          tags,
-        } as CreateMemoryInput;
-
-        memoryInputs.push(input);
-      } catch (error) {
-        errors.push(`Memory ${i + 1}: ❌ Validation failed - ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
-    }
-
-    // Use smart deduplication service for batch processing
-    if (memoryInputs.length > 0) {
-      try {
-        const smartResults = await memoryDeduplicationService.smartCreateMultipleMemories(memoryInputs, dbCtx);
-        
-        smartResults.forEach(({ index, result }) => {
-          const memoryNum = index + 1;
-          const actionEmoji = {
-            created: '✅ Created',
-            updated: '🔄 Updated',
-            skipped: '⏭️ Skipped'
-          }[result.action];
-          
-          results.push(`Memory ${memoryNum}: ${actionEmoji} (id: ${result.memoryId}) - ${result.reason}`);
-          
-          if (result.similarMemories && result.similarMemories.length > 0) {
-            results.push(`   📎 Found ${result.similarMemories.length} similar existing memories`);
-          }
-        });
-      } catch (error) {
-        errors.push(`Batch processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
-    }
-
-    // Build response summary
-    const totalMemories = data.memories.length;
-    const processedCount = memoryInputs.length;
-    const errorCount = errors.length;
-
-    let response = `🧠 Smart Memory Processing: ${totalMemories} memories → ${processedCount} processed, ${errorCount} errors\n\n`;
-    
-    if (results.length > 0) {
-      response += results.join('\n') + '\n';
-    }
-    
-    if (errors.length > 0) {
-      response += '\n❌ Errors:\n' + errors.join('\n');
-    }
-
-    console.log(response);
-
-    return response;
+    // Build and return final response
+    return buildResponse(stats, results, allErrors);
   },
-}); 
+});

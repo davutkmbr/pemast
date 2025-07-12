@@ -1,13 +1,17 @@
 // Import centralized database types
-import type { 
-  GatewayType, 
-  MessageType, 
-  ProcessingStatus, 
-  FileType,
-  RecurrenceType,
+import type { ReplyGenerator } from "../core/message-pipeline.js";
+import type {
+  MessageWithRelations as DBMessageWithRelations,
   Reminder as DBReminder,
-  MessageWithRelations as DBMessageWithRelations
-} from '../db/client.js';
+  FileType,
+  GatewayType,
+  MessageType,
+  ProcessingStatus,
+  RecurrenceType,
+} from "../db/client.js";
+
+// Import gateway for context
+import type { BaseGateway } from "../gateways/base-gateway.js";
 
 // Re-export database types as single source of truth
 export type { GatewayType, MessageType, ProcessingStatus, FileType, RecurrenceType };
@@ -17,6 +21,13 @@ export interface DatabaseContext {
   projectId: string;
   userId: string;
   channelId: string;
+}
+
+// === Extended Gateway Context for Tools ===
+export interface GatewayContext extends DatabaseContext {
+  gateway: BaseGateway;
+  replyGenerator: ReplyGenerator;
+  originalContext?: any; // Platform-specific context (e.g. Telegram Context)
 }
 
 // === User Context for Gateway Processing ===
@@ -154,21 +165,21 @@ export interface VectorSearchResult<T> {
  * All memories must include at least one of these categories
  */
 export const CORE_MEMORY_CATEGORIES = [
-  'personal_info',   // Personal information, identity details
-  'work',           // Work, career, professional information
-  'preference',     // Preferences, likes/dislikes
-  'skill',          // Skills, abilities, expertise
-  'project',        // Projects, tasks, work items
-  'contact',        // Contact information, addresses
-  'location',       // Address, location information
-  'health',         // Health-related information
-  'finance',        // Financial, money-related information
-  'family',         // Family, close relationships
-  'education',      // Education, learning information
-  'hobby',          // Hobbies, interests
-  'goal',           // Goals, plans, objectives
-  'fact',           // General facts, knowledge
-  'note'            // General notes, miscellaneous
+  "personal_info", // Personal information, identity details
+  "work", // Work, career, professional information
+  "preference", // Preferences, likes/dislikes
+  "skill", // Skills, abilities, expertise
+  "project", // Projects, tasks, work items
+  "contact", // Contact information, addresses
+  "location", // Address, location information
+  "health", // Health-related information
+  "finance", // Financial, money-related information
+  "family", // Family, close relationships
+  "education", // Education, learning information
+  "hobby", // Hobbies, interests
+  "goal", // Goals, plans, objectives
+  "fact", // General facts, knowledge
+  "note", // General notes, miscellaneous
 ] as const;
 
 export type MemoryCategory = (typeof CORE_MEMORY_CATEGORIES)[number];

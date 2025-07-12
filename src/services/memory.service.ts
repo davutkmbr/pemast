@@ -1,68 +1,69 @@
-import { eq, and, desc, or, ilike, sql } from 'drizzle-orm';
-import { db } from '../db/client.js';
-import { memories } from '../db/schema.js';
-import { embeddingService } from './embedding.service.js';
-import { vectorSearch } from '../utils/vector-search.js';
+import { and, desc, eq, ilike, isNotNull, or, type SQL, sql } from "drizzle-orm";
+import { db } from "../db/client.js";
+import { memories } from "../db/schema.js";
 import type {
   CreateMemoryInput,
   DatabaseContext,
   Memory,
-  VectorSearchResult,
+  MemoryCategory,
   MemoryWithRelations,
-  MemoryCategory
-} from '../types/index.js';
+  VectorSearchResult,
+} from "../types/index.js";
+import { vectorSearch } from "../utils/vector-search.js";
+import { embeddingService } from "./embedding.service.js";
 
 /**
  * Service for managing episodic memories with semantic search capabilities
  */
 export class MemoryService {
-
   /**
    * Create a new memory with semantic search support
    */
-  async createMemory(
-    input: CreateMemoryInput,
-    context: DatabaseContext
-  ): Promise<string> {
+  async createMemory(input: CreateMemoryInput, context: DatabaseContext): Promise<string> {
     try {
       // Generate embedding for semantic search using the generic service
       const searchText = embeddingService.combineFieldsForEmbedding([
         input.content,
         input.summary,
-        ...(input.tags || [])
+        ...(input.tags || []),
       ]);
 
       const embedding = await embeddingService.generateEmbedding(searchText);
 
-      const [savedMemory] = await db.insert(memories).values({
-        projectId: context.projectId,
-        userId: context.userId,
-        messageId: input.messageId,
-        content: input.content,
-        summary: input.summary,
-        embedding: embedding.length > 0 ? embedding : null,
-        fileId: input.fileId,
-        metadata: input.metadata,
-        tags: input.tags,
-      }).returning({ id: memories.id });
+      const [savedMemory] = await db
+        .insert(memories)
+        .values({
+          projectId: context.projectId,
+          userId: context.userId,
+          messageId: input.messageId,
+          content: input.content,
+          summary: input.summary,
+          embedding: embedding.length > 0 ? embedding : null,
+          fileId: input.fileId,
+          metadata: input.metadata,
+          tags: input.tags,
+        })
+        .returning({ id: memories.id });
 
       if (!savedMemory) {
-        throw new Error('Failed to create memory - no result returned');
+        throw new Error("Failed to create memory - no result returned");
       }
 
-      console.log('Created memory:', {
+      console.log("Created memory:", {
         id: savedMemory.id,
-        content: input.content.substring(0, 100) + '...',
+        content: input.content.substring(0, 100) + "...",
         summary: input.summary,
         tags: input.tags,
         hasFile: !!input.fileId,
-        hasEmbedding: embedding.length > 0
+        hasEmbedding: embedding.length > 0,
       });
 
       return savedMemory.id;
     } catch (error) {
-      console.error('Error creating memory:', error);
-      throw new Error(`Failed to create memory: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error creating memory:", error);
+      throw new Error(
+        `Failed to create memory: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -83,8 +84,10 @@ export class MemoryService {
 
       return memory as MemoryWithRelations | undefined;
     } catch (error) {
-      console.error('Error fetching memory by ID:', error);
-      throw new Error(`Failed to fetch memory: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error fetching memory by ID:", error);
+      throw new Error(
+        `Failed to fetch memory: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -94,14 +97,11 @@ export class MemoryService {
   async getRecentMemories(
     userId: string,
     projectId: string,
-    limit: number = 10
+    limit: number = 10,
   ): Promise<MemoryWithRelations[]> {
     try {
       const recentMemories = await db.query.memories.findMany({
-        where: and(
-          eq(memories.userId, userId),
-          eq(memories.projectId, projectId)
-        ),
+        where: and(eq(memories.userId, userId), eq(memories.projectId, projectId)),
         orderBy: desc(memories.createdAt),
         limit,
         with: {
@@ -114,8 +114,10 @@ export class MemoryService {
 
       return recentMemories as MemoryWithRelations[];
     } catch (error) {
-      console.error('Error fetching recent memories:', error);
-      throw new Error(`Failed to fetch recent memories: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error fetching recent memories:", error);
+      throw new Error(
+        `Failed to fetch recent memories: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -126,9 +128,15 @@ export class MemoryService {
     query: string,
     userId: string,
     projectId: string,
-    limit: number = 5
+    options?: {
+      limit?: number;
+      onlyFileMemories?: boolean;
+    },
   ): Promise<VectorSearchResult<Memory>[]> {
     try {
+      const limit = options?.limit || 5;
+      const onlyFileMemories = options?.onlyFileMemories || false;
+
       // Generate embedding for the search query
       const queryEmbedding = await embeddingService.generateEmbedding(query);
 
@@ -153,16 +161,18 @@ export class MemoryService {
         where: [
           eq(memories.userId, userId),
           eq(memories.projectId, projectId),
+          ...(onlyFileMemories ? [isNotNull(memories.fileId)] : []),
         ],
         queryEmbedding,
         limit,
       });
 
       return vectorResults;
-
     } catch (error) {
-      console.error('Error in semantic memory search:', error);
-      throw new Error(`Failed to search memories: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error in semantic memory search:", error);
+      throw new Error(
+        `Failed to search memories: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -173,26 +183,32 @@ export class MemoryService {
     query: string,
     userId: string,
     projectId: string,
-    limit: number = 10
+    options?: {
+      limit?: number;
+      onlyFileMemories?: boolean;
+    },
   ): Promise<Memory[]> {
     try {
+      const limit = options?.limit || 10;
+      const onlyFileMemories = options?.onlyFileMemories || false;
+
       const searchTerm = `%${query.toLowerCase()}%`;
 
       return await db.query.memories.findMany({
         where: and(
           eq(memories.userId, userId),
           eq(memories.projectId, projectId),
-          or(
-            ilike(memories.content, searchTerm),
-            ilike(memories.summary, searchTerm)
-          )
+          or(ilike(memories.content, searchTerm), ilike(memories.summary, searchTerm)),
+          ...(onlyFileMemories ? [isNotNull(memories.fileId)] : []),
         ),
         orderBy: desc(memories.createdAt),
         limit,
       });
     } catch (error) {
-      console.error('Error searching memories by text:', error);
-      throw new Error(`Failed to search memories by text: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error searching memories by text:", error);
+      throw new Error(
+        `Failed to search memories by text: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -203,9 +219,15 @@ export class MemoryService {
     tags: string[],
     userId: string,
     projectId: string,
-    limit: number = 10
+    options?: {
+      limit?: number;
+      onlyFileMemories?: boolean;
+    },
   ): Promise<Memory[]> {
     try {
+      const limit = options?.limit || 10;
+      const onlyFileMemories = options?.onlyFileMemories || false;
+
       // If no tags provided, return empty array
       if (!tags || tags.length === 0) {
         return [];
@@ -213,17 +235,17 @@ export class MemoryService {
 
       // Filter and clean tags
       const cleanTags = tags
-        .filter(tag => tag && tag.trim().length > 0) // Remove empty/null tags
-        .map(tag => tag.trim()) // Remove whitespace
-        .filter(tag => tag.length > 1) // Remove single character tags
-        .map(tag => {
+        .filter((tag) => tag && tag.trim().length > 0) // Remove empty/null tags
+        .map((tag) => tag.trim()) // Remove whitespace
+        .filter((tag) => tag.length > 1) // Remove single character tags
+        .map((tag) => {
           // Remove problematic characters and escape quotes
           return tag
-            .replace(/[.,:;!?()[\]{}]/g, '') // Remove punctuation
+            .replace(/[.,:;!?()[\]{}]/g, "") // Remove punctuation
             .replace(/'/g, "''") // Escape single quotes for PostgreSQL
             .toLowerCase();
         })
-        .filter(tag => tag.length > 0) // Remove empty tags after cleaning
+        .filter((tag) => tag.length > 0) // Remove empty tags after cleaning
         .slice(0, 20); // Limit to prevent overly long arrays
 
       // If no valid tags after filtering, return empty array
@@ -233,47 +255,48 @@ export class MemoryService {
 
       // Build PostgreSQL array literal with proper quoting
       // Each tag needs to be quoted to handle spaces and special chars
-      const quotedTags = cleanTags.map(tag => `"${tag}"`);
-      const tagsArray = `{${quotedTags.join(',')}}`;
+      const quotedTags = cleanTags.map((tag) => `"${tag}"`);
+      const tagsArray = `{${quotedTags.join(",")}}`;
 
-      console.log('Searching with cleaned tags:', cleanTags);
+      console.log("Searching with cleaned tags:", cleanTags);
 
       return await db.query.memories.findMany({
         where: and(
           eq(memories.userId, userId),
           eq(memories.projectId, projectId),
-          sql`${memories.tags} && ${tagsArray}::text[]` // Array overlap operator with explicit cast
+          sql`${memories.tags} && ${tagsArray}::text[]`, // Array overlap operator with explicit cast
+          ...(onlyFileMemories ? [isNotNull(memories.fileId)] : []),
         ),
         orderBy: desc(memories.createdAt),
         limit,
       });
     } catch (error) {
-      console.error('Error searching memories by tags:', error);
-      console.error('Failed tags array:', tags);
-      throw new Error(`Failed to search memories by tags: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error searching memories by tags:", error);
+      console.error("Failed tags array:", tags);
+      throw new Error(
+        `Failed to search memories by tags: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
   /**
    * Get memories associated with a specific file
    */
-  async getMemoriesByFile(
-    fileId: string,
-    userId: string,
-    projectId: string
-  ): Promise<Memory[]> {
+  async getMemoriesByFile(fileId: string, userId: string, projectId: string): Promise<Memory[]> {
     try {
       return await db.query.memories.findMany({
         where: and(
           eq(memories.fileId, fileId),
           eq(memories.userId, userId),
-          eq(memories.projectId, projectId)
+          eq(memories.projectId, projectId),
         ),
         orderBy: desc(memories.createdAt),
       });
     } catch (error) {
-      console.error('Error fetching memories by file:', error);
-      throw new Error(`Failed to fetch memories by file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error fetching memories by file:", error);
+      throw new Error(
+        `Failed to fetch memories by file: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -287,8 +310,10 @@ export class MemoryService {
         orderBy: desc(memories.createdAt),
       });
     } catch (error) {
-      console.error('Error fetching memories by message:', error);
-      throw new Error(`Failed to fetch memories by message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error fetching memories by message:", error);
+      throw new Error(
+        `Failed to fetch memories by message: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -302,9 +327,10 @@ export class MemoryService {
     projectId: string,
     options?: {
       limit?: number;
-      searchMethods?: ('semantic' | 'text' | 'tags')[];
+      searchMethods?: ("semantic" | "text" | "tags")[];
       includeFileMemories?: boolean;
-    }
+      onlyFileMemories?: boolean;
+    },
   ): Promise<{
     semantic: VectorSearchResult<Memory>[];
     text: Memory[];
@@ -312,25 +338,179 @@ export class MemoryService {
     combined: Memory[];
   }> {
     const limit = options?.limit || 5;
-    const searchMethods = options?.searchMethods || ['semantic', 'text', 'tags'];
+    const searchMethods = options?.searchMethods || ["semantic", "text", "tags"];
+    const onlyFileMemories = options?.onlyFileMemories || false;
 
     try {
       const results = {
         semantic: [] as VectorSearchResult<Memory>[],
         text: [] as Memory[],
         tags: [] as Memory[],
-        combined: [] as Memory[]
+        combined: [] as Memory[],
       };
 
       // Extract potential tag-like words from query (only meaningful categories/keywords)
-      const queryWords = query.toLowerCase()
-        .split(' ')
-        .filter(word => word.length > 2)
-        .filter(word => {
+      const queryWords = query
+        .toLowerCase()
+        .split(" ")
+        .filter((word) => word.length > 2)
+        .filter((word) => {
           // Only include words that look like meaningful tags
           // Skip common articles, prepositions, and generic words
-          const skipWords = ['the', 'and', 'but', 'for', 'with', 'from', 'that', 'this', 'than', 'more', 'less', 'even', 'also', 'very', 'much', 'many', 'some', 'all', 'any', 'his', 'her', 'him', 'she', 'they', 'them', 'their', 'was', 'were', 'are', 'is', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'cant', 'wont', 'dont', 'doesnt', 'didnt', 'hasnt', 'havent', 'isnt', 'arent', 'wasnt', 'werent', 'although', 'because', 'since', 'when', 'where', 'what', 'why', 'how', 'who', 'which', 'while', 'during', 'before', 'after', 'above', 'below', 'over', 'under', 'through', 'between', 'among', 'within', 'without', 'against', 'toward', 'towards', 'upon', 'onto', 'into', 'unto', 'about', 'around', 'across', 'along', 'beside', 'beyond', 'behind', 'beneath', 'inside', 'outside', 'instead', 'except', 'besides', 'including', 'regarding', 'concerning', 'considering', 'despite', 'unless', 'until', 'whether', 'however', 'therefore', 'moreover', 'furthermore', 'nevertheless', 'nonetheless', 'otherwise', 'meanwhile', 'likewise', 'similarly', 'consequently', 'accordingly', 'indeed', 'certainly', 'obviously', 'apparently', 'perhaps', 'probably', 'possibly', 'definitely', 'absolutely', 'completely', 'entirely', 'exactly', 'precisely', 'specifically', 'particularly', 'especially', 'generally', 'usually', 'normally', 'typically', 'commonly', 'frequently', 'regularly', 'occasionally', 'sometimes', 'rarely', 'seldom', 'never', 'always', 'often', 'usually'];
-          
+          const skipWords = [
+            "the",
+            "and",
+            "but",
+            "for",
+            "with",
+            "from",
+            "that",
+            "this",
+            "than",
+            "more",
+            "less",
+            "even",
+            "also",
+            "very",
+            "much",
+            "many",
+            "some",
+            "all",
+            "any",
+            "his",
+            "her",
+            "him",
+            "she",
+            "they",
+            "them",
+            "their",
+            "was",
+            "were",
+            "are",
+            "is",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "can",
+            "cant",
+            "wont",
+            "dont",
+            "doesnt",
+            "didnt",
+            "hasnt",
+            "havent",
+            "isnt",
+            "arent",
+            "wasnt",
+            "werent",
+            "although",
+            "because",
+            "since",
+            "when",
+            "where",
+            "what",
+            "why",
+            "how",
+            "who",
+            "which",
+            "while",
+            "during",
+            "before",
+            "after",
+            "above",
+            "below",
+            "over",
+            "under",
+            "through",
+            "between",
+            "among",
+            "within",
+            "without",
+            "against",
+            "toward",
+            "towards",
+            "upon",
+            "onto",
+            "into",
+            "unto",
+            "about",
+            "around",
+            "across",
+            "along",
+            "beside",
+            "beyond",
+            "behind",
+            "beneath",
+            "inside",
+            "outside",
+            "instead",
+            "except",
+            "besides",
+            "including",
+            "regarding",
+            "concerning",
+            "considering",
+            "despite",
+            "unless",
+            "until",
+            "whether",
+            "however",
+            "therefore",
+            "moreover",
+            "furthermore",
+            "nevertheless",
+            "nonetheless",
+            "otherwise",
+            "meanwhile",
+            "likewise",
+            "similarly",
+            "consequently",
+            "accordingly",
+            "indeed",
+            "certainly",
+            "obviously",
+            "apparently",
+            "perhaps",
+            "probably",
+            "possibly",
+            "definitely",
+            "absolutely",
+            "completely",
+            "entirely",
+            "exactly",
+            "precisely",
+            "specifically",
+            "particularly",
+            "especially",
+            "generally",
+            "usually",
+            "normally",
+            "typically",
+            "commonly",
+            "frequently",
+            "regularly",
+            "occasionally",
+            "sometimes",
+            "rarely",
+            "seldom",
+            "never",
+            "always",
+            "often",
+            "usually",
+          ];
+
           return !skipWords.includes(word);
         })
         .slice(0, 5); // Limit to prevent too many tag searches
@@ -338,27 +518,33 @@ export class MemoryService {
       // Parallel search execution
       const searches = [];
 
-      if (searchMethods.includes('semantic')) {
+      if (searchMethods.includes("semantic")) {
         searches.push(
-          this.searchMemoriesSemantic(query, userId, projectId, limit)
-            .then(res => { results.semantic = res; })
-            .catch(err => console.error('Semantic search failed:', err))
+          this.searchMemoriesSemantic(query, userId, projectId, { limit, onlyFileMemories })
+            .then((res) => {
+              results.semantic = res;
+            })
+            .catch((err) => console.error("Semantic search failed:", err)),
         );
       }
 
-      if (searchMethods.includes('text')) {
+      if (searchMethods.includes("text")) {
         searches.push(
-          this.searchMemoriesByText(query, userId, projectId, limit)
-            .then(res => { results.text = res; })
-            .catch(err => console.error('Text search failed:', err))
+          this.searchMemoriesByText(query, userId, projectId, { limit, onlyFileMemories })
+            .then((res) => {
+              results.text = res;
+            })
+            .catch((err) => console.error("Text search failed:", err)),
         );
       }
 
-      if (searchMethods.includes('tags') && queryWords.length > 0) {
+      if (searchMethods.includes("tags") && queryWords.length > 0) {
         searches.push(
-          this.searchMemoriesByTags(queryWords, userId, projectId, limit)
-            .then(res => { results.tags = res; })
-            .catch(err => console.error('Tag search failed:', err))
+          this.searchMemoriesByTags(queryWords, userId, projectId, { limit, onlyFileMemories })
+            .then((res) => {
+              results.tags = res;
+            })
+            .catch((err) => console.error("Tag search failed:", err)),
         );
       }
 
@@ -369,17 +555,17 @@ export class MemoryService {
       const allMemories = new Map<string, Memory>();
 
       // Add semantic results (highest priority)
-      results.semantic.forEach(result => {
+      results.semantic.forEach((result) => {
         allMemories.set(result.item.id, result.item);
       });
 
       // Add text search results
-      results.text.forEach(memory => {
+      results.text.forEach((memory) => {
         allMemories.set(memory.id, memory);
       });
 
       // Add tag search results
-      results.tags.forEach(memory => {
+      results.tags.forEach((memory) => {
         allMemories.set(memory.id, memory);
       });
 
@@ -400,10 +586,11 @@ export class MemoryService {
       });
 
       return results;
-
     } catch (error) {
-      console.error('Error in combined memory search:', error);
-      throw new Error(`Failed to find memories: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error in combined memory search:", error);
+      throw new Error(
+        `Failed to find memories: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -417,7 +604,7 @@ export class MemoryService {
       summary?: string;
       tags?: string[];
       metadata?: Record<string, any>;
-    }
+    },
   ): Promise<void> {
     try {
       // Generate new embedding if content or summary changed
@@ -427,8 +614,8 @@ export class MemoryService {
         if (currentMemory) {
           const searchText = embeddingService.combineFieldsForEmbedding([
             updates.content || currentMemory.content,
-            updates.summary || currentMemory.summary || '',
-            ...(updates.tags || currentMemory.tags || [])
+            updates.summary || currentMemory.summary || "",
+            ...(updates.tags || currentMemory.tags || []),
           ]);
 
           embedding = await embeddingService.generateEmbedding(searchText);
@@ -437,21 +624,21 @@ export class MemoryService {
 
       const updateData: any = {
         ...updates,
-        updatedAt: new Date()
+        updatedAt: new Date(),
       };
 
       if (embedding && embedding.length > 0) {
         updateData.embedding = embedding;
       }
 
-      await db.update(memories)
-        .set(updateData)
-        .where(eq(memories.id, memoryId));
+      await db.update(memories).set(updateData).where(eq(memories.id, memoryId));
 
-      console.log('Updated memory:', memoryId);
+      console.log("Updated memory:", memoryId);
     } catch (error) {
-      console.error('Error updating memory:', error);
-      throw new Error(`Failed to update memory: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error updating memory:", error);
+      throw new Error(
+        `Failed to update memory: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -461,17 +648,22 @@ export class MemoryService {
   async deleteMemory(memoryId: string): Promise<void> {
     try {
       await db.delete(memories).where(eq(memories.id, memoryId));
-      console.log('Deleted memory:', memoryId);
+      console.log("Deleted memory:", memoryId);
     } catch (error) {
-      console.error('Error deleting memory:', error);
-      throw new Error(`Failed to delete memory: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error deleting memory:", error);
+      throw new Error(
+        `Failed to delete memory: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
   /**
    * Get memory statistics for a user
    */
-  async getMemoryStats(userId: string, projectId: string): Promise<{
+  async getMemoryStats(
+    userId: string,
+    projectId: string,
+  ): Promise<{
     totalMemories: number;
     memoriesWithFiles: number;
     memoriesWithTags: number;
@@ -479,21 +671,18 @@ export class MemoryService {
   }> {
     try {
       const userMemories = await db.query.memories.findMany({
-        where: and(
-          eq(memories.userId, userId),
-          eq(memories.projectId, projectId)
-        ),
+        where: and(eq(memories.userId, userId), eq(memories.projectId, projectId)),
       });
 
       const totalMemories = userMemories.length;
-      const memoriesWithFiles = userMemories.filter(m => m.fileId).length;
-      const memoriesWithTags = userMemories.filter(m => m.tags && m.tags.length > 0).length;
+      const memoriesWithFiles = userMemories.filter((m) => m.fileId).length;
+      const memoriesWithTags = userMemories.filter((m) => m.tags && m.tags.length > 0).length;
 
       // Calculate top tags
       const tagCounts = new Map<string, number>();
-      userMemories.forEach(memory => {
+      userMemories.forEach((memory) => {
         if (memory.tags) {
-          memory.tags.forEach(tag => {
+          memory.tags.forEach((tag) => {
             tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
           });
         }
@@ -508,11 +697,13 @@ export class MemoryService {
         totalMemories,
         memoriesWithFiles,
         memoriesWithTags,
-        topTags
+        topTags,
       };
     } catch (error) {
-      console.error('Error getting memory stats:', error);
-      throw new Error(`Failed to get memory stats: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error getting memory stats:", error);
+      throw new Error(
+        `Failed to get memory stats: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -523,39 +714,43 @@ export class MemoryService {
   async getPersonalContext(
     userId: string,
     projectId: string,
-    limit: number = 15
+    limit: number = 15,
   ): Promise<Memory[]> {
     try {
       // Personal information categories to retrieve
       const personalCategories: MemoryCategory[] = [
-        'personal_info',   // Name, age, occupation, etc.
-        'contact',         // Email, phone, addresses
-        'location',        // Where they live/work
-        'preference',      // Important preferences
-        'work',           // Current job, role, company
-        'family',         // Family information
-        'goal',           // Important goals/objectives
-        'skill',          // Key skills they've mentioned
+        "personal_info", // Name, age, occupation, etc.
+        "contact", // Email, phone, addresses
+        "location", // Where they live/work
+        "preference", // Important preferences
+        "work", // Current job, role, company
+        "family", // Family information
+        "goal", // Important goals/objectives
+        "skill", // Key skills they've mentioned
       ];
 
       // Convert JavaScript array to PostgreSQL array literal format
-      const personalCategoriesArray = `{${personalCategories.join(',')}}`;
+      const personalCategoriesArray = `{${personalCategories.join(",")}}`;
 
       const personalMemories = await db.query.memories.findMany({
         where: and(
           eq(memories.userId, userId),
           eq(memories.projectId, projectId),
-          sql`${memories.tags} && ${personalCategoriesArray}::text[]` // Array overlap with explicit cast
+          sql`${memories.tags} && ${personalCategoriesArray}::text[]`, // Array overlap with explicit cast
         ),
         orderBy: desc(memories.createdAt),
         limit,
       });
 
-      console.log(`Retrieved ${personalMemories.length} personal context memories for user ${userId}`);
+      console.log(
+        `Retrieved ${personalMemories.length} personal context memories for user ${userId}`,
+      );
       return personalMemories;
     } catch (error) {
-      console.error('Error fetching personal context:', error);
-      throw new Error(`Failed to fetch personal context: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error fetching personal context:", error);
+      throw new Error(
+        `Failed to fetch personal context: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -565,59 +760,59 @@ export class MemoryService {
    */
   formatPersonalContextForPrompt(personalMemories: Memory[]): string {
     if (personalMemories.length === 0) {
-      return 'No personal information available about this user yet.';
+      return "No personal information available about this user yet.";
     }
 
     const sections = new Map<string, string[]>();
 
-    personalMemories.forEach(memory => {
+    personalMemories.forEach((memory) => {
       const tags = memory.tags || [];
       const content = memory.summary || memory.content;
 
       // Categorize by primary tag
-      if (tags.includes('personal_info')) {
-        if (!sections.has('Personal Info')) sections.set('Personal Info', []);
-        sections.get('Personal Info')!.push(content);
-      } else if (tags.includes('work')) {
-        if (!sections.has('Work')) sections.set('Work', []);
-        sections.get('Work')!.push(content);
-      } else if (tags.includes('location')) {
-        if (!sections.has('Location')) sections.set('Location', []);
-        sections.get('Location')!.push(content);
-      } else if (tags.includes('preference')) {
-        if (!sections.has('Preferences')) sections.set('Preferences', []);
-        sections.get('Preferences')!.push(content);
-      } else if (tags.includes('contact')) {
-        if (!sections.has('Contact')) sections.set('Contact', []);
-        sections.get('Contact')!.push(content);
-      } else if (tags.includes('family')) {
-        if (!sections.has('Family')) sections.set('Family', []);
-        sections.get('Family')!.push(content);
-      } else if (tags.includes('goal')) {
-        if (!sections.has('Goals')) sections.set('Goals', []);
-        sections.get('Goals')!.push(content);
-      } else if (tags.includes('skill')) {
-        if (!sections.has('Skills')) sections.set('Skills', []);
-        sections.get('Skills')!.push(content);
+      if (tags.includes("personal_info")) {
+        if (!sections.has("Personal Info")) sections.set("Personal Info", []);
+        sections.get("Personal Info")!.push(content);
+      } else if (tags.includes("work")) {
+        if (!sections.has("Work")) sections.set("Work", []);
+        sections.get("Work")!.push(content);
+      } else if (tags.includes("location")) {
+        if (!sections.has("Location")) sections.set("Location", []);
+        sections.get("Location")!.push(content);
+      } else if (tags.includes("preference")) {
+        if (!sections.has("Preferences")) sections.set("Preferences", []);
+        sections.get("Preferences")!.push(content);
+      } else if (tags.includes("contact")) {
+        if (!sections.has("Contact")) sections.set("Contact", []);
+        sections.get("Contact")!.push(content);
+      } else if (tags.includes("family")) {
+        if (!sections.has("Family")) sections.set("Family", []);
+        sections.get("Family")!.push(content);
+      } else if (tags.includes("goal")) {
+        if (!sections.has("Goals")) sections.set("Goals", []);
+        sections.get("Goals")!.push(content);
+      } else if (tags.includes("skill")) {
+        if (!sections.has("Skills")) sections.set("Skills", []);
+        sections.get("Skills")!.push(content);
       }
     });
 
     // Build formatted context
     const contextParts: string[] = [];
-    contextParts.push('=== USER PERSONAL CONTEXT ===');
+    contextParts.push("=== USER PERSONAL CONTEXT ===");
 
     sections.forEach((items, category) => {
       if (items.length > 0) {
         contextParts.push(`\n${category}:`);
-        items.forEach(item => {
+        items.forEach((item) => {
           contextParts.push(`- ${item}`);
         });
       }
     });
 
-    contextParts.push('\n=== END PERSONAL CONTEXT ===');
+    contextParts.push("\n=== END PERSONAL CONTEXT ===");
 
-    return contextParts.join('\n');
+    return contextParts.join("\n");
   }
 }
 

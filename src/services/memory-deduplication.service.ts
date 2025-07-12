@@ -1,12 +1,8 @@
-import OpenAI from 'openai';
-import { z } from 'zod';
-import { zodResponseFormat } from 'openai/helpers/zod';
-import { MemoryService } from './memory.service.js';
-import type { 
-  CreateMemoryInput, 
-  DatabaseContext, 
-  Memory,
-} from '../types/index.js';
+import OpenAI from "openai";
+import { zodResponseFormat } from "openai/helpers/zod";
+import { z } from "zod";
+import type { CreateMemoryInput, DatabaseContext, Memory } from "../types/index.js";
+import { MemoryService } from "./memory.service.js";
 
 /**
  * Service for smart memory deduplication and management
@@ -15,12 +11,19 @@ import type {
 export class MemoryDeduplicationService {
   private memoryService: MemoryService;
   private openai: OpenAI;
+  private model: string;
 
   constructor() {
     this.memoryService = new MemoryService();
     this.openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
+
+    const model = process.env.UTILITY_MODEL;
+    if (!model) {
+      throw new Error("MemoryDeduplicationService: model is not set");
+    }
+    this.model = model;
   }
 
   /**
@@ -29,15 +32,18 @@ export class MemoryDeduplicationService {
    */
   async smartCreateMemory(
     input: CreateMemoryInput,
-    context: DatabaseContext
+    context: DatabaseContext,
   ): Promise<{
-    action: 'created' | 'updated' | 'skipped';
+    action: "created" | "updated" | "skipped";
     memoryId: string;
     reason: string;
     similarMemories?: Memory[];
   }> {
     try {
-      console.log('🔍 Starting smart memory creation for:', input.content.substring(0, 100) + '...');
+      console.log(
+        "🔍 Starting smart memory creation for:",
+        input.content.substring(0, 100) + "...",
+      );
 
       // Step 1: Search for similar memories
       const searchQuery = this.buildSearchQuery(input);
@@ -45,19 +51,19 @@ export class MemoryDeduplicationService {
         searchQuery,
         context.userId,
         context.projectId,
-        { 
+        {
           limit: 10,
-          searchMethods: ['semantic', 'text', 'tags']
-        }
+          searchMethods: ["semantic", "text", "tags"],
+        },
       );
 
       if (searchResults.combined.length === 0) {
         // No similar memories found, create new one
         const memoryId = await this.memoryService.createMemory(input, context);
         return {
-          action: 'created',
+          action: "created",
           memoryId,
-          reason: 'No similar memories found',
+          reason: "No similar memories found",
         };
       }
 
@@ -65,20 +71,23 @@ export class MemoryDeduplicationService {
       const userContext = {
         userId: context.userId,
       };
-      
-      const decision = await this.analyzeMemorySimilarity(input, searchResults.combined, userContext);
+
+      const decision = await this.analyzeMemorySimilarity(
+        input,
+        searchResults.combined,
+        userContext,
+      );
 
       // Step 3: Execute the decided action
       return await this.executeMemoryAction(input, context, decision, searchResults.combined);
-
     } catch (error) {
-      console.error('Error in smart memory creation:', error);
+      console.error("Error in smart memory creation:", error);
       // Fallback to regular creation
       const memoryId = await this.memoryService.createMemory(input, context);
       return {
-        action: 'created',
+        action: "created",
         memoryId,
-        reason: `Fallback creation due to error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        reason: `Fallback creation due to error: ${error instanceof Error ? error.message : "Unknown error"}`,
       };
     }
   }
@@ -88,26 +97,26 @@ export class MemoryDeduplicationService {
    */
   private buildSearchQuery(input: CreateMemoryInput): string {
     const parts: string[] = [];
-    
+
     if (input.content) {
       // Extract key words from content (first 200 chars)
       const contentWords = input.content
         .substring(0, 200)
-        .split(' ')
-        .filter(word => word.length > 3)
+        .split(" ")
+        .filter((word) => word.length > 3)
         .slice(0, 10);
       parts.push(...contentWords);
     }
-    
+
     if (input.summary) {
       parts.push(input.summary);
     }
-    
+
     if (input.tags && input.tags.length > 0) {
       parts.push(...input.tags);
     }
-    
-    return parts.join(' ');
+
+    return parts.join(" ");
   }
 
   /**
@@ -119,16 +128,16 @@ export class MemoryDeduplicationService {
     userContext?: {
       userId: string;
       userName?: string;
-    }
+    },
   ): Promise<MemoryDecision> {
     const prompt = this.buildAnalysisPrompt(newMemory, existingMemories, userContext);
 
     try {
       const response = await this.openai.chat.completions.parse({
-        model: 'gpt-4.1',
+        model: this.model,
         messages: [
           {
-            role: 'system',
+            role: "system",
             content: `You are a memory deduplication expert. Analyze whether a new memory is similar enough to existing ones to warrant updating instead of creating new entries.
 
 CRITICAL CONTEXT AWARENESS:
@@ -152,32 +161,31 @@ IDENTITY MATCHING:
 - First person statements ("I am", "Ben") definitely refer to the memory owner
 - Look for personal corrections that override previous statements
 
-Be conservative - when in doubt about identity, prefer UPDATE over CREATE for personal information.`
+Be conservative - when in doubt about identity, prefer UPDATE over CREATE for personal information.`,
           },
           {
-            role: 'user',
-            content: prompt
-          }
+            role: "user",
+            content: prompt,
+          },
         ],
-        response_format: zodResponseFormat(MemoryDecisionSchema, 'memory_decision'),
+        response_format: zodResponseFormat(MemoryDecisionSchema, "memory_decision"),
         temperature: 0.1,
       });
 
       const decision = response.choices[0]?.message.parsed;
       if (!decision) {
-        throw new Error('No decision received from AI');
+        throw new Error("No decision received from AI");
       }
 
       return decision;
-
     } catch (error) {
-      console.error('Error in AI memory analysis:', error);
+      console.error("Error in AI memory analysis:", error);
       // Default to CREATE for safety
       return {
-        action: 'create',
+        action: "create",
         targetMemoryId: null,
         confidence: 0.5,
-        reasoning: `AI analysis failed, defaulting to create: ${error instanceof Error ? error.message : 'Unknown error'}`
+        reasoning: `AI analysis failed, defaulting to create: ${error instanceof Error ? error.message : "Unknown error"}`,
       };
     }
   }
@@ -186,35 +194,39 @@ Be conservative - when in doubt about identity, prefer UPDATE over CREATE for pe
    * Build analysis prompt for AI
    */
   private buildAnalysisPrompt(
-    newMemory: CreateMemoryInput, 
+    newMemory: CreateMemoryInput,
     existingMemories: Memory[],
     userContext?: {
       userId: string;
       userName?: string;
-    }
+    },
   ): string {
     const existingMemoriesText = existingMemories
-      .map((memory, index) => 
-        `${index + 1}. ID: ${memory.id}
+      .map(
+        (memory, index) =>
+          `${index + 1}. ID: ${memory.id}
 Content: ${memory.content}
-Summary: ${memory.summary || 'No summary'}
-Tags: ${memory.tags?.join(', ') || 'No tags'}
+Summary: ${memory.summary || "No summary"}
+Tags: ${memory.tags?.join(", ") || "No tags"}
 Created: ${memory.createdAt}
----`)
-      .join('\n');
+---`,
+      )
+      .join("\n");
 
-    const userContextText = userContext ? `
+    const userContextText = userContext
+      ? `
 USER CONTEXT:
 - User ID: ${userContext.userId}
-- Known name: ${userContext.userName ? userContext.userName : 'Unknown'}
+- Known name: ${userContext.userName ? userContext.userName : "Unknown"}
 - Note: All memories below belong to this same user
 
-` : '';
+`
+      : "";
 
     return `${userContextText}NEW MEMORY TO ANALYZE:
 Content: ${newMemory.content}
-Summary: ${newMemory.summary || 'No summary'}
-Tags: ${newMemory.tags?.join(', ') || 'No tags'}
+Summary: ${newMemory.summary || "No summary"}
+Tags: ${newMemory.tags?.join(", ") || "No tags"}
 
 EXISTING SIMILAR MEMORIES:
 ${existingMemoriesText}
@@ -238,19 +250,19 @@ Provide your analysis considering:
     input: CreateMemoryInput,
     context: DatabaseContext,
     decision: MemoryDecision,
-    existingMemories: Memory[]
+    existingMemories: Memory[],
   ): Promise<{
-    action: 'created' | 'updated' | 'skipped';
+    action: "created" | "updated" | "skipped";
     memoryId: string;
     reason: string;
     similarMemories?: Memory[];
   }> {
     switch (decision.action) {
-      case 'update':
+      case "update": {
         if (!decision.targetMemoryId) {
-          throw new Error('Update action requires targetMemoryId');
+          throw new Error("Update action requires targetMemoryId");
         }
-        
+
         const updateData: {
           content?: string;
           summary?: string;
@@ -261,9 +273,10 @@ Provide your analysis considering:
           metadata: {
             ...input.metadata,
             lastUpdated: new Date().toISOString(),
-            updateReason: 'Smart deduplication merge',
-            originalMemoryBackup: existingMemories.find(m => m.id === decision.targetMemoryId)?.content
-          }
+            updateReason: "Smart deduplication merge",
+            originalMemoryBackup: existingMemories.find((m) => m.id === decision.targetMemoryId)
+              ?.content,
+          },
         };
 
         if (input.summary) {
@@ -277,34 +290,37 @@ Provide your analysis considering:
         await this.memoryService.updateMemory(decision.targetMemoryId, updateData);
 
         return {
-          action: 'updated',
+          action: "updated",
           memoryId: decision.targetMemoryId,
           reason: decision.reasoning,
           similarMemories: existingMemories,
         };
+      }
 
-      case 'skip':
+      case "skip": {
         // Return the most similar existing memory
         const mostSimilar = existingMemories[0];
         if (!mostSimilar) {
-          throw new Error('No existing memories found for skip action');
+          throw new Error("No existing memories found for skip action");
         }
         return {
-          action: 'skipped',
+          action: "skipped",
           memoryId: mostSimilar.id,
           reason: decision.reasoning,
           similarMemories: existingMemories,
         };
+      }
 
-      case 'create':
-      default:
+      case "create":
+      default: {
         const memoryId = await this.memoryService.createMemory(input, context);
         return {
-          action: 'created',
+          action: "created",
           memoryId,
           reason: decision.reasoning,
           similarMemories: existingMemories,
         };
+      }
     }
   }
 
@@ -313,29 +329,31 @@ Provide your analysis considering:
    */
   async smartCreateMultipleMemories(
     memories: CreateMemoryInput[],
-    context: DatabaseContext
-  ): Promise<Array<{
-    index: number;
-    input: CreateMemoryInput;
-    result: {
-      action: 'created' | 'updated' | 'skipped';
-      memoryId: string;
-      reason: string;
-      similarMemories?: Memory[];
-    };
-  }>> {
+    context: DatabaseContext,
+  ): Promise<
+    Array<{
+      index: number;
+      input: CreateMemoryInput;
+      result: {
+        action: "created" | "updated" | "skipped";
+        memoryId: string;
+        reason: string;
+        similarMemories?: Memory[];
+      };
+    }>
+  > {
     const results = [];
 
     for (let i = 0; i < memories.length; i++) {
       const memory = memories[i];
       if (!memory) continue; // Skip undefined entries
-      
+
       try {
         const result = await this.smartCreateMemory(memory, context);
         results.push({
           index: i,
           input: memory,
-          result
+          result,
         });
       } catch (error) {
         console.error(`Error processing memory ${i}:`, error);
@@ -345,10 +363,10 @@ Provide your analysis considering:
           index: i,
           input: memory,
           result: {
-            action: 'created' as const,
+            action: "created" as const,
             memoryId,
-            reason: `Fallback creation: ${error instanceof Error ? error.message : 'Unknown error'}`
-          }
+            reason: `Fallback creation: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
         });
       }
     }
@@ -359,13 +377,16 @@ Provide your analysis considering:
 
 // Schema for AI decision response
 const MemoryDecisionSchema = z.object({
-  action: z.enum(['create', 'update', 'skip']).describe('The action to take with the new memory'),
-  targetMemoryId: z.string().nullish().describe('ID of existing memory to update (only for update action)'),
-  confidence: z.number().min(0).max(1).describe('Confidence level in the decision (0-1)'),
-  reasoning: z.string().describe('Explanation of why this action was chosen'),
+  action: z.enum(["create", "update", "skip"]).describe("The action to take with the new memory"),
+  targetMemoryId: z
+    .string()
+    .nullish()
+    .describe("ID of existing memory to update (only for update action)"),
+  confidence: z.number().min(0).max(1).describe("Confidence level in the decision (0-1)"),
+  reasoning: z.string().describe("Explanation of why this action was chosen"),
 });
 
 type MemoryDecision = z.infer<typeof MemoryDecisionSchema>;
 
 // Singleton instance
-export const memoryDeduplicationService = new MemoryDeduplicationService(); 
+export const memoryDeduplicationService = new MemoryDeduplicationService();

@@ -70,7 +70,7 @@ interface StreamingUI {
 - Handles message splitting, markdown formatting
 - All Telegram-specific logic contained here
 
-#### **`TelegramGatewayV2`** - Clean gateway
+#### **`TelegramGateway`** - Clean gateway
 - Uses dependency injection
 - Creates UI and ReplyGenerator per request
 - No business logic, just orchestration
@@ -78,7 +78,7 @@ interface StreamingUI {
 ## 🔄 **New Message Flow**
 
 ```
-1. TelegramGatewayV2.handleMessage(ctx, type)
+1. TelegramGateway.handleMessage(ctx, type)
    ↓
 2. processMessage(ctx, type) → ProcessedMessage
    ↓
@@ -132,7 +132,7 @@ interface StreamingUI {
 - [x] Build new gateway with DI
 
 ### **Phase 2: Replace Old Components** ✅
-- [x] Update `index.ts` to use `TelegramGatewayV2`
+- [x] Update `index.ts` to use `TelegramGateway`
 - [x] Remove old `MessageRouter`, `MainAgentService`
 - [x] Clean up old `TelegramStreamUI`, `AgentRunner`
 - [x] Remove old `TelegramGateway`, `ResponseFormatter`
@@ -150,7 +150,7 @@ The following legacy files were removed during Phase 2:
 - `src/agent/main-agent.service.ts` - Replaced by `CoreReplyGenerator` + `StreamingReplyGenerator`
 - `src/gateways/telegram/telegram-stream-ui.ts` - Replaced by `TelegramStreamingUI`
 - `src/agent/agent-runner.ts` - Functionality moved to `StreamingReplyGenerator`
-- `src/gateways/telegram/telegram-gateway.ts` - Replaced by `TelegramGatewayV2`
+- `src/gateways/telegram/telegram-gateway.ts` - Replaced by `TelegramGateway`
 - `src/gateways/response-formatter.ts` - Functionality moved to reply generators
 
 ## 🔧 **Usage Examples**

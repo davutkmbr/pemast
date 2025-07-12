@@ -1,8 +1,8 @@
 import OpenAI from 'openai';
 import { z } from 'zod';
 import { zodResponseFormat } from 'openai/helpers/zod';
-import { readFile } from '../utils/read-file';
-import { buildSystemPrompt } from '../utils/prompts';
+import { readFile } from '../utils/read-file.js';
+import { buildSystemPrompt } from '../utils/prompts.js';
 
 export type Intent = 'upsert_fact' | 'query_fact' | 'store_memory' | 'schedule_reminder' | 'none';
 
@@ -23,10 +23,16 @@ export type IntentClassification = z.infer<typeof IntentClassificationSchema>;
 export class IntentClassifier {
   private openai: OpenAI;
   private model: string;
+  private systemPrompt: Promise<string>;
 
   constructor(apiKey: string, model: string = 'gpt-4o-mini') {
     this.openai = new OpenAI({ apiKey });
     this.model = model;
+    this.systemPrompt = this.loadSystemPrompt();
+  }
+
+  private async loadSystemPrompt(): Promise<string> {
+    return buildSystemPrompt(await readFile('prompts/intent-classifier.md'));
   }
 
   /**
@@ -34,7 +40,7 @@ export class IntentClassifier {
    */
   async classify(messageText: string): Promise<IntentClassification> {
     // System + few-shot prompt examples
-    const systemPrompt = buildSystemPrompt(await readFile('prompts/intent-classifier.md'));
+    const systemPrompt = await this.systemPrompt;
 
     const fewShotExamples: { role: 'user' | 'assistant'; content: string }[] = [
       {

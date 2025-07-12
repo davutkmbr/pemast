@@ -1,23 +1,76 @@
 import type { Context } from 'telegraf';
 import type { MessageProcessor } from '../types.js';
 import type { ProcessedMessage, FileReference } from '../../types/index.js';
-import { TranscriptProcessor, type AudioFile } from '../../processors/transcript.processor.js';
-import { FileService } from '../../services/file.service.js';
+import { TranscriptProcessor, type AudioFile, type TranscriptResult } from '../../processors/transcript.processor.js';
+import { TelegramFileDownloader } from './telegram-file-downloader.js';
+import { CoreFileProcessorPipeline, type FileProcessorPipeline } from '../../core/file-processor-pipeline.js';
 
 export interface TelegramVoiceProcessorConfig {
   transcriptProcessor: TranscriptProcessor;
   telegramBotToken: string;
 }
 
+/**
+ * Voice-specific pipeline implementation
+ */
+class TelegramVoicePipeline implements FileProcessorPipeline<AudioFile, TranscriptResult> {
+  constructor(
+    private downloader: TelegramFileDownloader,
+    private transcriptProcessor: TranscriptProcessor
+  ) {}
+
+  async downloadFile(fileId: string, fileName: string, mimeType: string, duration?: number): Promise<AudioFile> {
+    return this.downloader.downloadAudio(fileId, fileName, mimeType, duration);
+  }
+
+  async processFile(file: AudioFile): Promise<TranscriptResult> {
+    return this.transcriptProcessor.transcribeAudio(file);
+  }
+
+  createProcessedMessage(
+    result: TranscriptResult,
+    file: AudioFile,
+    fileReference: FileReference,
+    gatewayMessageId: string,
+    timestamp: Date,
+    storedFileId: string,
+    originalCaption?: string
+  ): ProcessedMessage {
+    return {
+      content: result.text || '[Voice message - transcription failed]',
+      messageType: 'voice',
+      gatewayType: 'telegram',
+      gatewayMessageId,
+      timestamp,
+      fileReference,
+      processingMetadata: {
+        processor: 'transcript',
+        fileId: storedFileId,
+        duration: result.duration,
+        transcriptionLength: result.text.length,
+        confidence: result.confidence,
+        audioMimeType: file.mimeType,
+        processingTimestamp: new Date().toISOString(),
+      },
+      processingStatus: result.error ? 'failed' : 'completed',
+    };
+  }
+}
+
 export class TelegramVoiceProcessor implements MessageProcessor {
-  private transcriptProcessor: TranscriptProcessor;
-  private telegramBotToken: string;
-  private fileService: FileService;
+  private pipeline: CoreFileProcessorPipeline<AudioFile, TranscriptResult>;
 
   constructor(config: TelegramVoiceProcessorConfig) {
-    this.transcriptProcessor = config.transcriptProcessor;
-    this.telegramBotToken = config.telegramBotToken;
-    this.fileService = new FileService();
+    const downloader = new TelegramFileDownloader(config.telegramBotToken);
+    const voicePipeline = new TelegramVoicePipeline(downloader, config.transcriptProcessor);
+    
+    // Create core pipeline with file storage moved to upper hierarchy
+    this.pipeline = new CoreFileProcessorPipeline(
+      voicePipeline,
+      'voice',  // fileType for storage
+      'voice',  // messageType for ProcessedMessage
+      'telegram' // gatewayType
+    );
   }
 
   async processMessage(ctx: Context): Promise<ProcessedMessage> {
@@ -46,140 +99,16 @@ export class TelegramVoiceProcessor implements MessageProcessor {
       throw new Error('Message does not contain voice or audio');
     }
 
-    try {
-      // Download the audio file from Telegram
-      const audioFile = await this.downloadTelegramAudio(fileId, fileName, mimeType, duration);
-      
-      // Store the file in database and get fileId
-      const storedFileId = await this.storeVoiceFile(audioFile, fileId);
-      
-      // Transcribe using the generic processor
-      const transcriptResult = await this.transcriptProcessor.transcribeAudio(audioFile);
-      
-      // Create file reference
-      const fileReference: FileReference = {
-        id: fileId,
-        fileName,
-        mimeType,
-        gateway: 'telegram',
-      };
-
-      // Return modern ProcessedMessage with transcription
-      // NOTE: messageType is 'voice', so NO memory will be created
-      // Only the transcript text goes into messages.content
-      return {
-        content: transcriptResult.text || '[Voice message - transcription failed]',
-        messageType: 'voice', // This will NOT trigger memory creation
-        gatewayType: 'telegram',
-        gatewayMessageId: message.message_id.toString(),
-        timestamp: new Date(message.date * 1000),
-        fileReference,
-        processingMetadata: {
-          processor: 'transcript',
-          fileId: storedFileId, // Store fileId for reference
-          duration: transcriptResult.duration,
-          transcriptionLength: transcriptResult.text.length,
-          confidence: transcriptResult.confidence,
-          audioMimeType: mimeType,
-          processingTimestamp: new Date().toISOString(),
-        },
-        processingStatus: transcriptResult.error ? 'failed' : 'completed',
-      };
-      
-    } catch (error) {
-      console.error('Error processing voice message:', error);
-      
-      // Return fallback message on processing failure
-      const fileReference: FileReference = {
-        id: fileId,
-        fileName,
-        mimeType,
-        gateway: 'telegram',
-      };
-
-      return {
-        content: '[Voice message - processing failed]',
-        messageType: 'voice',
-        gatewayType: 'telegram',
-        gatewayMessageId: message.message_id.toString(),
-        timestamp: new Date(message.date * 1000),
-        fileReference,
-        processingMetadata: {
-          processor: 'transcript',
-          duration,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        },
-        processingStatus: 'failed',
-      };
-    }
-  }
-
-  /**
-   * Store voice file in database and upload to Supabase Storage
-   */
-  private async storeVoiceFile(audioFile: AudioFile, telegramFileId: string): Promise<string> {
-    try {
-      const fileId = await this.fileService.createFileWithUpload(
-        audioFile.fileName,
-        audioFile.buffer,
-        audioFile.mimeType,
-        'voice',
-        telegramFileId,
-        'telegram'
-      );
-      
-      console.log(`✅ Voice file uploaded and stored: ${fileId} (${audioFile.fileName})`);
-      
-      return fileId;
-    } catch (error) {
-      console.error('Error storing voice file:', error);
-      throw new Error(`Failed to store voice file: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  private async downloadTelegramAudio(
-    fileId: string,
-    fileName: string,
-    mimeType: string,
-    duration?: number
-  ): Promise<AudioFile> {
-    try {
-      // Get file info from Telegram
-      const fileResponse = await fetch(
-        `https://api.telegram.org/bot${this.telegramBotToken}/getFile?file_id=${fileId}`
-      );
-      
-      if (!fileResponse.ok) {
-        throw new Error(`Failed to get file info: ${fileResponse.statusText}`);
-      }
-      
-      const fileData = await fileResponse.json() as any;
-      
-      if (!fileData.ok || !fileData.result?.file_path) {
-        throw new Error('Invalid file data from Telegram API');
-      }
-      
-      // Download the file
-      const audioResponse = await fetch(
-        `https://api.telegram.org/file/bot${this.telegramBotToken}/${fileData.result.file_path}`
-      );
-      
-      if (!audioResponse.ok) {
-        throw new Error(`Failed to download audio file: ${audioResponse.statusText}`);
-      }
-      
-      const audioBuffer = await audioResponse.arrayBuffer();
-      
-      return {
-        buffer: audioBuffer,
-        fileName,
-        mimeType,
-        duration,
-      };
-      
-    } catch (error) {
-      console.error('Error downloading Telegram audio:', error);
-      throw error;
-    }
+    // Use the core pipeline: Download → Store → Process
+    return this.pipeline.processFile(
+      fileId,
+      fileName,
+      mimeType,
+      message.message_id.toString(),
+      new Date(message.date * 1000),
+      undefined, // No caption for voice messages
+      mimeType,  // Additional arg for voice download
+      duration   // Additional arg for voice download
+    );
   }
 } 

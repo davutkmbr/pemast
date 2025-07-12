@@ -42,7 +42,8 @@ export const searchMemoryTool = tool({
     const combined: Memory[] = results.combined.slice(0, limit);
     if (combined.length === 0) return "No matching memories found.";
 
-    const lines = combined.map((m, i) => `${i + 1}. ${m.summary ?? m.content.slice(0, 80)}`);
+    // const lines = combined.map((m, i) => `${i + 1}. ${m.summary ?? m.content.slice(0, 80)}`);
+    const lines = combined.map((m, i) => `${i + 1}. ${m.content}`);
     return lines.join("\n");
   },
 });

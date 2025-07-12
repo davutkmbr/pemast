@@ -2,27 +2,42 @@ import { Telegraf } from 'telegraf';
 import type { Context } from 'telegraf';
 import { message } from 'telegraf/filters';
 import { BaseGateway, type GatewayConfig } from '../base-gateway.js';
-import { MessageRouter } from '../message-router.js';
 import { TelegramExtractor } from './telegram-extractor.js';
+import { TelegramStreamingUI } from './telegram-streaming-ui.js';
+import { StreamingReplyGenerator } from '../../core/streaming-reply-generator.js';
+import { MessageProcessingService } from '../../services/message-processing.service.js';
+import { CoreMessagePipeline } from '../../core/message-pipeline.js';
 import type { MessageProcessor } from '../types.js';
-import { MessageService } from '../../services/message.service.js';
-import { DatabaseContext, ProcessedMessage } from '../../types/index.js';
+import type { ProcessedMessage, DatabaseContext, UserContext } from '../../types/index.js';
 
-export class TelegramGateway extends BaseGateway {
+/**
+ * Refactored Telegram Gateway using core pipeline
+ * Clean separation of concerns, dependency injection
+ */
+export class TelegramGatewayV2 extends BaseGateway {
   private bot: Telegraf;
-  private messageRouter: MessageRouter;
-  private telegramExtractor: TelegramExtractor;
+  private extractor: TelegramExtractor;
+  private processors: Map<string, MessageProcessor> = new Map();
+  private messagePipeline: CoreMessagePipeline;
   private status: 'starting' | 'running' | 'stopping' | 'stopped' = 'stopped';
 
-  constructor(config: GatewayConfig) {
+  constructor(
+    config: GatewayConfig,
+    messageProcessingService?: MessageProcessingService
+  ) {
     super(config);
     this.bot = new Telegraf(config.token);
-
-    // Create Telegram-specific extractor
-    this.telegramExtractor = new TelegramExtractor();
-
-    // Create message router with Telegram extractor
-    this.messageRouter = new MessageRouter(this.telegramExtractor);
+    this.extractor = new TelegramExtractor();
+    
+    // Inject dependencies
+    const processingService = messageProcessingService || new MessageProcessingService();
+    
+    // Create core pipeline (no UI dependency here)
+    this.messagePipeline = new CoreMessagePipeline(
+      processingService,
+      // We'll create the reply generator per-request with UI
+      {} as any // Placeholder - will be replaced per request
+    );
 
     this.setupHandlers();
   }
@@ -36,7 +51,12 @@ export class TelegramGateway extends BaseGateway {
   }
 
   registerProcessor(type: string, processor: MessageProcessor): void {
-    this.messageRouter.registerProcessor(type, processor);
+    this.processors.set(type, processor);
+  }
+
+  async sendMessage(ctx: Context, message: string): Promise<void> {
+    const ui = new TelegramStreamingUI(ctx);
+    await ui.sendMessage(message);
   }
 
   private setupHandlers() {
@@ -76,105 +96,86 @@ export class TelegramGateway extends BaseGateway {
     });
   }
 
-  async sendMessage(ctx: Context, message: string) {
-    try {
-      // Split long messages if needed
-      const maxLength = 4096; // Telegram's message limit
-      if (message.length <= maxLength) {
-        return await ctx.reply(message, { parse_mode: 'Markdown' });
-      } else {
-        // Split into chunks
-        const chunks = this.splitMessage(message, maxLength);
-        let firstMessage: any = null;
-        for (const chunk of chunks) {
-          const m = await ctx.reply(chunk, { parse_mode: 'Markdown' });
-          if (!firstMessage) firstMessage = m;
-        }
-        return firstMessage;
-      }
-    } catch (error) {
-      console.error('Error sending message:', error);
-    }
-  }
-
   private async handleMessage(ctx: Context, messageType: string) {
     try {
-      ctx.sendChatAction('typing');
+      // 1. Process the message (extract or use processor)
+      const processedMessage = await this.processMessage(ctx, messageType);
+      
+      // 2. Extract user context
+      const userContext: UserContext = this.extractor.extractUserContext(ctx);
+      
+      // 3. Save to database using core pipeline
+      const result = await this.messagePipeline.processMessage(
+        processedMessage,
+        userContext,
+        'telegram'
+      );
 
-      // Process message and save to database (single flow)
-      const result = await this.messageRouter.routeMessage(ctx, messageType);
-
-      if (!result) {
+      if (!result.success) {
+        await ctx.reply('Sorry, I encountered an error processing your message.');
         return;
       }
 
-      const { reply, context } = result;
-
-      // Send response to user and get Telegram message info
-      const sent = await this.sendMessage(ctx, result.reply);
-
-      // Persist assistant message if we have DB context and Telegram sent
-      if (context && sent && typeof sent.message_id !== 'undefined') {
-        await this.saveAssistantMessage(sent.message_id, reply, context);
+      // 4. Generate reply with streaming UI
+      const ui = new TelegramStreamingUI(ctx);
+      const replyGenerator = new StreamingReplyGenerator(ui);
+      
+      let reply: string;
+      if (processedMessage.messageType === 'photo') {
+        reply = await replyGenerator.generatePhotoAck(processedMessage, result.context);
+      } else {
+        reply = await replyGenerator.generateReply(processedMessage.content, result.context);
       }
+
+      // 5. Send final reply
+      await ui.sendMessage(reply);
+
+      // 6. Save assistant message
+      await this.saveAssistantMessage(ctx, reply, result.context);
 
     } catch (error) {
       console.error('Error handling message:', error);
-      await this.sendMessage(ctx, 'Sorry, I encountered an error processing your message.');
+      await ctx.reply('Sorry, I encountered an error processing your message.');
     }
   }
 
-  private splitMessage(message: string, maxLength: number): string[] {
-    const chunks: string[] = [];
-    let currentChunk = '';
-
-    const lines = message.split('\n');
-
-    for (const line of lines) {
-      if ((currentChunk + line + '\n').length > maxLength) {
-        if (currentChunk) {
-          chunks.push(currentChunk.trim());
-          currentChunk = '';
-        }
-
-        // If a single line is too long, split it
-        if (line.length > maxLength) {
-          const lineChunks = line.match(new RegExp(`.{1,${maxLength - 10}}`, 'g')) || [];
-          chunks.push(...lineChunks);
-        } else {
-          currentChunk = line + '\n';
-        }
-      } else {
-        currentChunk += line + '\n';
-      }
+  private async processMessage(ctx: Context, messageType: string): Promise<ProcessedMessage> {
+    const processor = this.processors.get(messageType);
+    
+    if (processor) {
+      console.log(`✅ Using processor for ${messageType}`);
+      return processor.processMessage(ctx);
+    } else {
+      console.log(`⚠️ No processor found for ${messageType}, using extractor`);
+      return this.extractor.extractMessage(ctx, messageType);
     }
-
-    if (currentChunk.trim()) {
-      chunks.push(currentChunk.trim());
-    }
-
-    return chunks;
   }
 
-  /**
-   * Save assistant reply to database
-   */
   private async saveAssistantMessage(
-    telegramMessageId: number,
+    ctx: Context,
     content: string,
     context: DatabaseContext
   ) {
     try {
-      const messageService = new MessageService();
-      const processed: ProcessedMessage = {
+      // Get Telegram message ID from the last sent message
+      // This is a bit tricky - we'd need to track the sent message
+      // For now, we'll use a timestamp-based ID
+      const gatewayMessageId = `assistant_${Date.now()}`;
+      
+      const processedMessage: ProcessedMessage = {
         content,
         messageType: 'text',
         gatewayType: 'telegram',
-        gatewayMessageId: telegramMessageId.toString(),
+        gatewayMessageId,
         timestamp: new Date(),
       };
 
-      await messageService.saveMessage(processed, context, 'assistant');
+      await this.messagePipeline.processMessage(
+        processedMessage,
+        this.extractor.extractUserContext(ctx),
+        'telegram'
+      );
+      
       console.log('💾 Assistant message saved');
     } catch (err) {
       console.error('Failed to save assistant message:', err);
@@ -192,11 +193,11 @@ export class TelegramGateway extends BaseGateway {
     this.bot.launch()
       .then(() => {
         this.status = 'running';
-        console.log('🚀 Telegram gateway started successfully');
+        console.log('🚀 Telegram gateway V2 started successfully');
       })
       .catch((error) => {
         this.status = 'stopped';
-        console.error('Failed to start Telegram gateway:', error);
+        console.error('Failed to start Telegram gateway V2:', error);
       });
   }
 
@@ -209,6 +210,6 @@ export class TelegramGateway extends BaseGateway {
 
     this.bot.stop('SIGTERM');
     this.status = 'stopped';
-    console.log('🛑 Telegram gateway stopped');
+    console.log('🛑 Telegram gateway V2 stopped');
   }
 } 

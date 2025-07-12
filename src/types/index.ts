@@ -147,4 +147,28 @@ export interface VectorSearchResult<T> {
   item: T;
   similarity: number;
   distance: number;
-} 
+}
+
+/**
+ * Core memory categories - fixed list for consistent categorization
+ * All memories must include at least one of these categories
+ */
+export const CORE_MEMORY_CATEGORIES = [
+  'personal_info',   // Personal information, identity details
+  'work',           // Work, career, professional information
+  'preference',     // Preferences, likes/dislikes
+  'skill',          // Skills, abilities, expertise
+  'project',        // Projects, tasks, work items
+  'contact',        // Contact information, addresses
+  'location',       // Address, location information
+  'health',         // Health-related information
+  'finance',        // Financial, money-related information
+  'family',         // Family, close relationships
+  'education',      // Education, learning information
+  'hobby',          // Hobbies, interests
+  'goal',           // Goals, plans, objectives
+  'fact',           // General facts, knowledge
+  'note'            // General notes, miscellaneous
+] as const;
+
+export type MemoryCategory = (typeof CORE_MEMORY_CATEGORIES)[number];

@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import { TelegramGateway, TelegramVoiceProcessor, TelegramPhotoProcessor } from './gateways/index.js';
 import { TranscriptProcessor, PhotoProcessor } from './processors/index.js';
-import { memoryService } from './services/memory.service.js';
 
 async function main() {
   const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -17,28 +16,26 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('Starting personal assistant...');
+  console.log('Starting personal assistant with refactored architecture...');
   
-  // Initialize Telegram gateway
+  // Initialize Telegram gateway V2 with dependency injection
   const telegramGateway = new TelegramGateway({ token: telegramToken });
   
-  // Initialize generic transcript processor
+  // Initialize generic processors
   const transcriptProcessor = new TranscriptProcessor({
     openaiApiKey,
   });
   
-  // Initialize generic photo processor
   const photoProcessor = new PhotoProcessor({
     openaiApiKey,
   });
   
-  // Initialize Telegram-specific voice processor
+  // Initialize Telegram-specific processors
   const telegramVoiceProcessor = new TelegramVoiceProcessor({
     transcriptProcessor,
     telegramBotToken: telegramToken,
   });
   
-  // Initialize Telegram-specific photo processor
   const telegramPhotoProcessor = new TelegramPhotoProcessor({
     photoProcessor,
     telegramBotToken: telegramToken,
@@ -50,9 +47,10 @@ async function main() {
   
   console.log('✅ Voice transcription enabled (OpenAI Whisper)');
   console.log('✅ Photo analysis enabled (GPT-4 Vision)');
+  console.log('✅ Clean architecture with dependency injection');
   
-  // TODO: Register other processors when implemented
-  // telegramGateway.registerProcessor('document', new FileProcessor());
+  // Start the gateway
+  telegramGateway.start();
   
   // Handle graceful shutdown
   process.on('SIGINT', () => {
@@ -66,13 +64,6 @@ async function main() {
     telegramGateway.stop();
     process.exit(0);
   });
-
-  telegramGateway.start();
-  console.log(`🚀 Personal assistant ready! Gateway: ${telegramGateway.getGatewayType()}`);
-  console.log('📝 Text messages: Direct processing');
-  console.log('🎤 Voice messages: OpenAI Whisper transcription');
-  console.log('📸 Photos: GPT-4 Vision analysis (OCR, description, analysis)');
-  console.log('📄 Documents: Basic detection (processor pending)');
 }
 
 main().catch((error) => {

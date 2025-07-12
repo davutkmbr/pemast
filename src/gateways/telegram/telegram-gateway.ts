@@ -305,7 +305,7 @@ export class TelegramGateway extends BaseGateway {
       .launch()
       .then(() => {
         this.status = "running";
-        console.log("🚀 Telegram gateway V2 started successfully");
+        console.log("🚀 Telegram gateway started successfully");
       })
       .catch((error) => {
         this.status = "stopped";
@@ -322,6 +322,6 @@ export class TelegramGateway extends BaseGateway {
 
     this.bot.stop("SIGTERM");
     this.status = "stopped";
-    console.log("🛑 Telegram gateway V2 stopped");
+    console.log("🛑 Telegram gateway stopped");
   }
 }

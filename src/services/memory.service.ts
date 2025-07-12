@@ -51,11 +51,7 @@ export class MemoryService {
 
       console.log("Created memory:", {
         id: savedMemory.id,
-        content: input.content.substring(0, 100) + "...",
         summary: input.summary,
-        tags: input.tags,
-        hasFile: !!input.fileId,
-        hasEmbedding: embedding.length > 0,
       });
 
       return savedMemory.id;

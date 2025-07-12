@@ -61,7 +61,11 @@ export class TelegramStreamingUI implements StreamingUI {
 
   async onToolStart(toolName: string): Promise<void> {
     console.log("🔧 Running tool *", toolName, "*…");
-    await this.sendMessage(`🔧 Running tool *${toolName}*…`);
+
+    if (toolName !== "analyze_conversation") {
+      await this.sendMessage(`🔧 Running tool *${toolName}*…`);
+    }
+
     this.sendTyping();
   }
 

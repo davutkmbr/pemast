@@ -17,13 +17,7 @@ export async function createMainAgent(context: DatabaseContext) {
   // Create the reasoning agent which will coordinate all other specialized agents
   const reasoningAgent = await createReasoningAgent(context);
 
-  console.log("🚀 Multi-Agent System Initialized:");
-  console.log("   🧠 Reasoning Agent - Strategic Coordinator");
-  console.log("   💾 Memory Agent - Information Specialist");
-  console.log("   🔍 Validation Agent - Consistency Guardian");
-  console.log("   📁 File Agent - Document Specialist");
-  console.log("   ⚙️ Preference Agent - Settings Specialist");
-  console.log("   🌐 Web Agent - Research Specialist");
+  console.log("🚀 Enhanced Multi-Agent System Initialized.");
 
   return reasoningAgent;
 }

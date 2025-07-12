@@ -56,14 +56,7 @@ export class FileService {
         throw new Error("Failed to create file - no result returned");
       }
 
-      console.log("Created file record:", {
-        id: savedFile.id,
-        name: fileData.originalName,
-        type: fileData.fileType,
-        size: fileData.fileSize,
-        gateway: fileData.gatewayType,
-        storagePath: storagePath,
-      });
+      console.log("Created file record:", savedFile.id);
 
       return savedFile.id;
     } catch (error) {

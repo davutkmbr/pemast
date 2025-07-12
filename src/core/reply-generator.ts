@@ -1,12 +1,12 @@
 import {
-  run,
-  user as userMessage,
   assistant as assistantMessage,
+  run,
   system as systemMessage,
+  user as userMessage,
 } from "@openai/agents";
-import { mainAgent } from "../agent/main-agent.js";
-import { MessageService } from "../services/message.service.js";
+import { createMainAgent } from "../agent/main-agent.js";
 import { MemoryService } from "../services/memory.service.js";
+import { MessageService } from "../services/message.service.js";
 import type { DatabaseContext, GatewayContext, ProcessedMessage } from "../types/index.js";
 import type { ReplyGenerator } from "./message-pipeline.js";
 
@@ -49,27 +49,8 @@ export class CoreReplyGenerator implements ReplyGenerator {
       limit,
     );
 
-    // Fetch personal context memories
-    const personalMemories = await this.memoryService.getPersonalContext(
-      dbCtx.userId,
-      dbCtx.projectId,
-      15, // Get up to 15 personal context items
-    );
-
-    // Format personal context for prompt
-    const personalContext = this.memoryService.formatPersonalContextForPrompt(personalMemories);
-
     // Build agent input with personal context first
     const inputItems = [];
-
-    // Add personal context as system message if available
-    if (personalMemories.length > 0) {
-      inputItems.push(
-        systemMessage(
-          `IMPORTANT: Here is what you know about this user personally. Use this information to provide more personalized responses:\n\n${personalContext}`,
-        ),
-      );
-    }
 
     // Add conversation history (chronological order)
     history
@@ -83,8 +64,10 @@ export class CoreReplyGenerator implements ReplyGenerator {
     // Append the new message
     inputItems.push(userMessage(messageContent));
 
+    const agent = await createMainAgent(context);
+
     // Run agent without streaming - pass the full context (GatewayContext if available)
-    const result = await run(mainAgent, inputItems, {
+    const result = await run(agent, inputItems, {
       stream: false,
       context,
     });
@@ -129,7 +112,8 @@ export class CoreReplyGenerator implements ReplyGenerator {
     const messages = [systemMessage(promptSystem), userMessage(`Fotoğrafın tanımı: ${desc}`)];
 
     try {
-      const result = await run(mainAgent, messages, { stream: false, context });
+      const agent = await createMainAgent(context);
+      const result = await run(agent, messages, { stream: false, context });
       const output = result.finalOutput;
       if (typeof output === "string") return output;
       return JSON.stringify(output);

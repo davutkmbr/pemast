@@ -38,8 +38,8 @@ export type NewMessage = typeof schema.messages.$inferInsert;
 export type Memory = typeof schema.memories.$inferSelect;
 export type NewMemory = typeof schema.memories.$inferInsert;
 
-export type Fact = typeof schema.facts.$inferSelect;
-export type NewFact = typeof schema.facts.$inferInsert;
+export type UserPreference = typeof schema.userPreferences.$inferSelect;
+export type NewUserPreference = typeof schema.userPreferences.$inferInsert;
 
 export type Reminder = typeof schema.reminders.$inferSelect;
 export type NewReminder = typeof schema.reminders.$inferInsert;

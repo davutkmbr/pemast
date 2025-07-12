@@ -230,7 +230,7 @@ async function processMemoriesWithDeduplication(
 
 export const storeMemoryTool = tool({
   name: "store_memory",
-  description: (await readFile("prompts/store-memory-tool.md")).replace(
+  description: (await readFile("src/prompts/store-memory-tool.md")).replace(
     /{CORE_CATEGORIES}/g,
     CORE_MEMORY_CATEGORIES.join(", "),
   ),

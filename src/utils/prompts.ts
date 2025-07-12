@@ -1,23 +1,9 @@
-export const buildSystemPrompt = (prompt: string, personalContext?: string) => {
-  const basePrompt = `Today is ${new Date().toISOString().split("T")[0]}.`;
+export const buildSystemPrompt = (prompt: string, appends?: string[]) => {
+  const today = new Date().toISOString().split("T")[0];
+  const basePrompt = `Today is ${today}.`;
 
-  let enhancedPrompt = prompt;
-
-  // Inject personal context into the instructions if available
-  if (
-    personalContext &&
-    personalContext.trim() !== "No personal information available about this user yet."
-  ) {
-    enhancedPrompt =
-      prompt +
-      `
-
-## PERSONAL CONTEXT FOR THIS USER
-
-${personalContext}
-
-Remember to use this personal information naturally in your responses to be more helpful and personalized.`;
-  }
+  // If there's additional context to append, add it with spacing
+  const enhancedPrompt = appends ? `${prompt}\n\n${appends.join("\n\n")}` : prompt;
 
   return `${basePrompt} ${enhancedPrompt}`;
 };

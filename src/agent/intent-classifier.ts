@@ -40,7 +40,7 @@ export class IntentClassifier {
   }
 
   private async loadSystemPrompt(): Promise<string> {
-    return buildSystemPrompt(await readFile("prompts/intent-classifier.md"));
+    return buildSystemPrompt(await readFile("src/prompts/intent-classifier.md"));
   }
 
   /**

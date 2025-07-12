@@ -1,12 +1,12 @@
+import type { MessageProcessingService } from "../services/message-processing.service.js";
 import type {
-  ProcessedMessage,
   DatabaseContext,
   GatewayContext,
-  UserContext,
-  MessageProcessingResult,
   GatewayType,
+  MessageProcessingResult,
+  ProcessedMessage,
+  UserContext,
 } from "../types/index.js";
-import type { MessageProcessingService } from "../services/message-processing.service.js";
 
 /**
  * Platform-agnostic message processing pipeline

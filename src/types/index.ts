@@ -3,6 +3,7 @@ import type { ReplyGenerator } from "../core/message-pipeline.js";
 import type {
   MessageWithRelations as DBMessageWithRelations,
   Reminder as DBReminder,
+  UserPreference as DBUserPreference,
   FileType,
   GatewayType,
   MessageType,
@@ -154,6 +155,21 @@ export interface CreateReminderInput {
   };
 }
 
+// === User Preferences Types ===
+
+export type UserPreference = DBUserPreference;
+
+export interface CreateUserPreferenceInput {
+  key: string;
+  value: string;
+  metadata?: Record<string, any>;
+}
+
+export interface UpdateUserPreferenceInput {
+  value: string;
+  metadata?: Record<string, any>;
+}
+
 export interface VectorSearchResult<T> {
   item: T;
   similarity: number;
@@ -178,7 +194,7 @@ export const CORE_MEMORY_CATEGORIES = [
   "education", // Education, learning information
   "hobby", // Hobbies, interests
   "goal", // Goals, plans, objectives
-  "fact", // General facts, knowledge
+  "knowledge", // General knowledge, facts
   "note", // General notes, miscellaneous
 ] as const;
 

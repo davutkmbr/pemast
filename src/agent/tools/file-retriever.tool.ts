@@ -281,24 +281,36 @@ function generateResponseMessage(
   sentFiles: SentFileInfo[],
   filterReasoning?: string,
 ): string {
-  let response = textResults.join("\n");
+  // Start with clear indication that files have been sent
+  let response = "";
 
-  // Add information about sent files for AI awareness
   if (sentFiles.length > 0) {
-    response += "\n\n---\n";
-    response += `📎 **${sentFiles.length} file(s) retrieved and sent to user:**\n`;
+    response += `🎯 **FILES SUCCESSFULLY SENT:**\n`;
+    response += `${sentFiles.length} file(s) have been sent to the user. The user can see these files above.\n\n`;
 
     sentFiles.forEach((file, index) => {
       const sizeInfo = file.size ? ` (${Math.round(file.size / 1024)}KB)` : "";
-      response += `${index + 1}. ${file.fileName} - ${file.fileType}${sizeInfo}\n`;
+      response += `📎 ${index + 1}. ${file.fileName} - ${file.fileType}${sizeInfo}\n`;
     });
 
-    response += "\n*Note: Files have been successfully retrieved and sent to the user above.*";
+    response += "\n";
+  }
+
+  // Add memory search results
+  if (textResults.length > 0) {
+    response += "📋 **Related memory records:**\n";
+    response += textResults.join("\n");
   }
 
   // Add AI filtering reasoning if available
   if (filterReasoning) {
     response += `\n\n🤖 **File Filter Applied:** ${filterReasoning}`;
+  }
+
+  // Clear instruction for AI
+  if (sentFiles.length > 0) {
+    response +=
+      "\n\n⚠️ **IMPORTANT:** The files listed above have ALREADY been sent to the user. The AI can reference these files in its response but should not attempt to send them again.";
   }
 
   return response;
@@ -343,6 +355,7 @@ export const fileRetrieverTool = tool({
 
       // Step 4: Generate response with file info and filter reasoning
       const response = generateResponseMessage(textResults, sentFiles, filterReasoning);
+
       return response;
     } catch (error) {
       console.error("Error in file retriever tool:", error);

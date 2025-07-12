@@ -190,20 +190,17 @@ export const memories = pgTable("memories", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const facts = pgTable("facts", {
+export const userPreferences = pgTable("user_preferences", {
   id: uuid("id").defaultRandom().primaryKey(),
   projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
-  messageId: uuid("message_id").references(() => messages.id, { onDelete: "cascade" }), // Source message
 
-  keyText: text("key_text").notNull(),
-  valueText: text("value_text").notNull(),
-  embedding: vector("embedding", { dimensions: 1536 }),
-  confidence: real("confidence").default(1.0),
+  // Preference key-value pairs
+  key: text("key").notNull(),
+  value: text("value").notNull(),
 
-  // For fact updates/versioning
-  previousFactId: uuid("previous_fact_id"), // Self-reference to facts.id
-  isActive: boolean("is_active").default(true),
+  // Optional metadata for complex preferences
+  metadata: jsonb("metadata").$type<Record<string, any>>(),
 
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -216,7 +213,7 @@ export const projectsRelations = relations(projects, ({ many }) => ({
   messages: many(messages),
   reminders: many(reminders),
   memories: many(memories),
-  facts: many(facts),
+  userPreferences: many(userPreferences),
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -224,7 +221,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   messages: many(messages),
   reminders: many(reminders),
   memories: many(memories),
-  facts: many(facts),
+  userPreferences: many(userPreferences),
 }));
 
 export const messagesRelations = relations(messages, ({ one, many }) => ({
@@ -236,7 +233,6 @@ export const messagesRelations = relations(messages, ({ one, many }) => ({
   // They work at the database level but can cause TypeScript circular reference issues
   reminders: many(reminders),
   memories: many(memories),
-  facts: many(facts),
 }));
 
 export const filesRelations = relations(files, ({ many }) => ({
@@ -256,12 +252,9 @@ export const memoriesRelations = relations(memories, ({ one }) => ({
   file: one(files, { fields: [memories.fileId], references: [files.id] }),
 }));
 
-export const factsRelations = relations(facts, ({ one }) => ({
-  project: one(projects, { fields: [facts.projectId], references: [projects.id] }),
-  user: one(users, { fields: [facts.userId], references: [users.id] }),
-  message: one(messages, { fields: [facts.messageId], references: [messages.id] }),
-  // Note: Self-referencing relation for previousFact can be added later if needed
-  // It works at the database level but can cause TypeScript circular reference issues
+export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
+  project: one(projects, { fields: [userPreferences.projectId], references: [projects.id] }),
+  user: one(users, { fields: [userPreferences.userId], references: [users.id] }),
 }));
 
 export const remindersRelations = relations(reminders, ({ one }) => ({

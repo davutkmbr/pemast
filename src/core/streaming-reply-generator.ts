@@ -6,7 +6,6 @@ import {
   user as userMessage,
 } from "@openai/agents";
 import { createMainAgent } from "../agent/main-agent.js";
-import { MemoryService } from "../services/memory.service.js";
 import { MessageService } from "../services/message.service.js";
 import type { DatabaseContext, GatewayContext, ProcessedMessage } from "../types/index.js";
 import type { ReplyGenerator, StreamingUI } from "./message-pipeline.js";
@@ -17,15 +16,12 @@ import type { ReplyGenerator, StreamingUI } from "./message-pipeline.js";
  */
 export class StreamingReplyGenerator implements ReplyGenerator {
   private messageService: MessageService;
-  private memoryService: MemoryService;
 
   constructor(
     private ui: StreamingUI,
     messageService?: MessageService,
-    memoryService?: MemoryService,
   ) {
     this.messageService = messageService || new MessageService();
-    this.memoryService = memoryService || new MemoryService();
   }
 
   /**
@@ -55,23 +51,8 @@ export class StreamingReplyGenerator implements ReplyGenerator {
       limit,
     );
 
-    // TODO: Comment for now.
-    // Fetch personal context memories
-    /*const personalMemories = await this.memoryService.getPersonalContext(
-      dbCtx.userId,
-      dbCtx.projectId,
-      15, // Get up to 15 personal context items
-    );*/
-
-    // Format personal context for injection into agent instructions
-    const personalContext =
-      /*personalMemories.length > 0
-        ? this.memoryService.formatPersonalContextForPrompt(personalMemories)
-        : undefined;*/
-      undefined;
-
     // Create main agent with personal context integrated into instructions
-    const agent = await createMainAgent(personalContext);
+    const agent = await createMainAgent(context);
 
     // Build agent input
     const inputItems = [];
@@ -128,38 +109,20 @@ export class StreamingReplyGenerator implements ReplyGenerator {
     processedMessage: ProcessedMessage,
     context: DatabaseContext | GatewayContext,
   ): Promise<string> {
-    // Extract database context
-    const dbCtx: DatabaseContext = {
-      userId: context.userId,
-      projectId: context.projectId,
-      channelId: context.channelId,
-    };
-
     const meta = processedMessage.processingMetadata || {};
     const desc = meta.description || meta.summary || processedMessage.content || "Bir fotoğraf";
 
-    // TODO: Comment for now.
-    // Get personal context for more personalized photo response
-    /*const personalMemories = await this.memoryService.getPersonalContext(
-      dbCtx.userId,
-      dbCtx.projectId,
-      10,
-    );*/
-
-    const personalContext = undefined;
-    //personalMemories.length > 0
-    //  ? this.memoryService.formatPersonalContextForPrompt(personalMemories)
-    //  : "";
-
     const promptSystem =
       "Kullanıcıya aşağıdaki fotoğrafla ilgili SAMİMİ, emojili ve en fazla 2 cümlelik Türkçe bir onay mesajı yaz. " +
-      "Mesajın sonunda görseli kaydettiğini belirt." +
-      (personalContext ? `\n\nKullanıcı hakkında bildiğin bilgiler:\n${personalContext}` : "");
+      "Mesajın sonunda görseli kaydettiğini belirt.";
 
     const messages = [systemMessage(promptSystem), userMessage(`Fotoğrafın tanımı: ${desc}`)];
 
     try {
-      const result = await run(await createMainAgent(), messages, { stream: false, context });
+      const result = await run(await createMainAgent(context), messages, {
+        stream: false,
+        context,
+      });
       const output = result.finalOutput;
       if (typeof output === "string") return output;
       return JSON.stringify(output);

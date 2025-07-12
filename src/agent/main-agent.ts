@@ -1,13 +1,13 @@
 import { Agent, webSearchTool } from "@openai/agents";
-import { buildSystemPrompt } from "../utils/prompts.js";
-import { readFile } from "../utils/read-file.js";
+import { generateMainAgentPrompt } from "../prompts/main-agent.prompt.js";
+import type { DatabaseContext } from "../types/index.js";
 import { fileRetrieverTool } from "./tools/file-retriever.tool.js";
 import { searchMemoryTool } from "./tools/search-memory.tool.js";
+import { setUserPreferenceTool } from "./tools/set-user-preference.tool.js";
 import { storeMemoryTool } from "./tools/store-memory.tool.js";
 
-async function createMainAgent(personalContext?: string) {
-  const baseInstructions = await readFile("prompts/main-agent.md");
-  const instructions = buildSystemPrompt(baseInstructions, personalContext);
+export async function createMainAgent(context: DatabaseContext) {
+  const instructions = await generateMainAgentPrompt(context);
 
   const model = process.env.MAIN_MODEL;
   if (!model) {
@@ -21,12 +21,12 @@ async function createMainAgent(personalContext?: string) {
       parallelToolCalls: true,
     },
     instructions,
-    tools: [searchMemoryTool, storeMemoryTool, fileRetrieverTool],
+    tools: [
+      webSearchTool(),
+      searchMemoryTool,
+      storeMemoryTool,
+      setUserPreferenceTool,
+      fileRetrieverTool,
+    ],
   });
 }
-
-// Export the default agent without personal context for backwards compatibility
-export const mainAgent = await createMainAgent();
-
-// Export the factory function for creating agents with personal context
-export { createMainAgent };

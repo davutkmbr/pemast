@@ -13,6 +13,7 @@ Built with **Node.js + TypeScript**, **OpenAI APIs**, and **Supabase** (PostgreS
 - **Clean Architecture**: Refactored with dependency injection and platform-agnostic design
 - **Type-Safe Pipeline**: Centralized types from database schema (single source of truth)
 - **Vector Search**: Semantic search with OpenAI embeddings and pgvector
+- **Modular Prompt System**: String builder utilities and composable prompt sections
 
 ### ✅ **Completed - Message Processing**
 - **TelegramGateway V2**: Modern message handling with dependency injection
@@ -29,6 +30,7 @@ Built with **Node.js + TypeScript**, **OpenAI APIs**, and **Supabase** (PostgreS
 ### ✅ **Completed - AI Agent System**
 - **Main Agent**: Conversational AI with OpenAI Agents framework
 - **Memory Tools**: Store and search memories with semantic understanding
+- **User Preferences**: Modular preference system with validation and response builders
 - **Streaming UI**: Real-time responses with platform-specific UI adapters
 - **Personal Context**: Dynamic context injection from user memories
 
@@ -48,6 +50,7 @@ Built with **Node.js + TypeScript**, **OpenAI APIs**, and **Supabase** (PostgreS
 | **Multi-modal Processing**                  | Voice messages, documents, photos                                        | Transcripts, analyzes, and stores with semantic search capabilities              |
 | **Semantic Memory Search**                  | "What do you know about my work experience?"                           | Vector search across memories with relevance ranking                             |
 | **Personal Context Injection**              | Agent maintains context from previous conversations                      | Dynamically loads relevant memories for personalized responses                   |
+| **Customizable Behavior**                   | "Set language to Turkish, be more casual"                              | User preferences with modular prompt system and validation                      |
 | **File Analysis & Storage**                 | Upload documents, photos, voice notes                                   | Processes content, extracts text, creates searchable memories                   |
 | **Platform-Agnostic Architecture**         | Works with Telegram, extensible to Slack/Discord                       | Clean separation between gateways and business logic                            |
 
@@ -106,12 +109,13 @@ Telegram Message
 
 #### **3. AI Agent System** (`src/agent/`)
 - **Main Agent**: Conversational AI with tool support
-- **Tools**: Memory storage, search, web search
+- **Tools**: Memory storage, search, user preferences, web search
 - **Personal Context**: Dynamic memory injection for personalized responses
 
 #### **4. Services Layer** (`src/services/`)
 - **Memory Management**: Creation, search, deduplication
 - **File Handling**: Upload, download, metadata management
+- **User Preferences**: Type-safe preference management with validation
 - **Embedding**: Centralized semantic search operations
 - **Message Processing**: Complete message lifecycle management
 
@@ -119,6 +123,50 @@ Telegram Message
 - **Normalized Schema**: Projects, Users, Messages, Memories, Files, Facts, Reminders
 - **Vector Support**: pgvector for semantic search
 - **Type Safety**: Full TypeScript integration with Drizzle ORM
+
+#### **6. Utilities Layer** (`src/utils/`)
+- **String Builder**: clsx-inspired utility for conditional string composition
+- **Response Builders**: Modular response message construction
+- **Vector Search**: Generic semantic search operations
+- **Prompt Utilities**: Reusable prompt building functions
+
+---
+
+## 🧱 Modular Code Architecture
+
+### **String Builder Pattern**
+We've implemented a clsx-inspired utility for building strings conditionally:
+
+```typescript
+import { stringBuilder } from './utils/string-builder.js';
+
+// Conditional string composition
+const prompt = stringBuilder(
+  "Base text\n",
+  condition && "Conditional text\n",
+  { "Text if true\n": booleanValue },
+  ["Multiple", " strings", condition && " conditionally"]
+);
+```
+
+### **Modular Prompt System** 
+Prompts are now composed from reusable sections:
+
+```typescript
+// Before: 200+ lines of if/else string concatenation
+// After: Clean, composable functions
+return stringBuilder(
+  buildCommunicationStyleSection(preferences.communication_style),
+  buildLanguageSection(preferences.language, preferences.communication_style),
+  buildResponseLengthSection(preferences.response_length),
+  buildCoreRulesSection()
+);
+```
+
+### **User Preferences Architecture**
+- **Type-Safe Validation**: Zod schemas for each preference type
+- **Modular Responses**: Dedicated response builders for different scenarios
+- **Clean Tool Implementation**: Separated validation, processing, and response logic
 
 ---
 
@@ -147,7 +195,8 @@ src/
 │   ├─ intent-classifier.ts      # Message intent detection
 │   └─ tools/                     # Agent tools
 │       ├─ store-memory.tool.ts        # Memory storage with deduplication
-│       └─ search-memory.tool.ts       # Semantic memory search
+│       ├─ search-memory.tool.ts       # Semantic memory search
+│       └─ set-user-preference.tool.ts # User preference management
 ├─ processors/              # Generic AI processors
 │   ├─ transcript.processor.ts    # OpenAI Whisper integration
 │   └─ photo.processor.ts         # GPT-4 Vision integration
@@ -155,6 +204,7 @@ src/
 │   ├─ message-processing.service.ts    # Message lifecycle management
 │   ├─ memory.service.ts                # Memory CRUD + search
 │   ├─ memory-deduplication.service.ts  # Smart memory deduplication
+│   ├─ user-preferences.service.ts      # Type-safe preference management
 │   ├─ embedding.service.ts             # Centralized embedding operations
 │   ├─ file.service.ts                  # File storage + metadata
 │   ├─ reminder.service.ts              # Scheduled reminders
@@ -162,11 +212,18 @@ src/
 │   ├─ project.service.ts               # Project management
 │   ├─ channel.service.ts               # Channel management
 │   └─ message.service.ts               # Message CRUD operations
+├─ prompts/                 # AI prompt templates
+│   ├─ main-agent.prompt.ts       # Dynamic agent prompt generation
+│   ├─ main-agent.md              # Agent behavior documentation
+│   ├─ store-memory-tool.md       # Memory tool guidelines
+│   └─ intent-classifier.md       # Intent classification prompts
 ├─ db/                      # Database layer
 │   ├─ schema.ts                 # Complete normalized schema
 │   ├─ client.ts                 # Type-safe database client
 │   └─ migrations/               # SQL migrations
 ├─ utils/                   # Utilities
+│   ├─ string-builder.ts         # clsx-inspired string composition
+│   ├─ preference-response-builder.ts # Modular preference responses
 │   ├─ vector-search.ts          # Generic vector search helper
 │   ├─ project-context.ts        # User context management
 │   ├─ file-utils.ts             # File type detection
@@ -186,6 +243,7 @@ src/
 - **`messages`**: Raw message content + metadata
 - **`files`**: File storage with Supabase integration
 - **`memories`**: Processed content with semantic search
+- **`user_preferences`**: Type-safe user customization settings
 - **`facts`**: Structured knowledge (schema ready)
 - **`reminders`**: Scheduled notifications with recurrence
 
@@ -197,6 +255,10 @@ files.id → messages.fileId → memories.messageId + memories.fileId
 -- User context and permissions
 projects.id → project_members.projectId → users.id
 channels.projectId → projects.id
+
+-- User preferences for personalization
+user_preferences.userId → users.id
+user_preferences.projectId → projects.id
 ```
 
 ### **Vector Search Integration**
@@ -213,10 +275,10 @@ channels.projectId → projects.id
 // Main conversational agent with tools
 const agent = new Agent({
   name: "main-agent",
-  model: "gpt-4.1",
+  model: "gpt-4",
   modelSettings: { parallelToolCalls: true },
   instructions: dynamicSystemPrompt,
-  tools: [searchMemoryTool, storeMemoryTool, webSearchTool()]
+  tools: [searchMemoryTool, storeMemoryTool, setUserPreferenceTool, webSearchTool()]
 });
 ```
 
@@ -226,12 +288,42 @@ const agent = new Agent({
 |------|---------|----------------|
 | **store_memory** | Smart memory storage with deduplication | Auto-categorization, similarity detection |
 | **search_memory** | Semantic memory search | Vector search + text matching + tags |
+| **set_user_preference** | User behavior customization | Type-safe preference validation and storage |
 | **web_search** | Real-time web information | OpenAI Agents built-in tool |
 
 ### **Personal Context System**
 - **Dynamic Loading**: Agent loads relevant memories before each conversation
 - **Context Injection**: Recent memories become part of system prompt
 - **Semantic Relevance**: Uses embeddings to find contextually relevant information
+- **User Preferences**: Personalizes communication style, language, and behavior
+
+---
+
+## ⚙️ User Preferences System
+
+### **Available Preferences**
+```typescript
+// Language & Communication
+language: "tr" | "en" | "de" | "fr" | "es"
+communication_style: "formal" | "casual" | "friendly" | "professional" | "humorous"
+response_tone: "neutral" | "warm" | "enthusiastic" | "calm" | "direct"
+response_length: "brief" | "medium" | "detailed" | "comprehensive"
+
+// Assistant Behavior
+assistant_personality: "helpful" | "wise" | "creative" | "analytical" | "empathetic"
+emoji_usage: "none" | "minimal" | "moderate" | "frequent"
+
+// Other Settings
+greeting_style: string
+reminder_format: string
+reminder_time_preference: string
+```
+
+### **Type-Safe Implementation**
+- **Zod Validation**: Each preference type has its own schema
+- **Discriminated Unions**: Type-safe key-value pairing
+- **Modular Responses**: Clean, composable response builders
+- **Dynamic Prompts**: Preferences automatically influence agent behavior
 
 ---
 
@@ -242,7 +334,7 @@ const agent = new Agent({
 const CORE_MEMORY_CATEGORIES = [
   'personal_info', 'work', 'preference', 'skill', 'project',
   'contact', 'location', 'health', 'finance', 'family',
-  'education', 'hobby', 'goal', 'fact', 'note'
+  'education', 'hobby', 'goal', 'knowledge', 'note'
 ] as const;
 ```
 
@@ -323,6 +415,7 @@ pnpm db:studio        # Open Drizzle Studio
 3. **Type Safety**: Full TypeScript with strict mode
 4. **Single Source of Truth**: All types derived from database schema
 5. **Clean Separation**: Gateway → Core → Services → Database
+6. **Modular Design**: Composable utilities and reusable components
 
 ---
 
@@ -351,6 +444,7 @@ pnpm db:studio        # Open Drizzle Studio
 - ✅ Semantic search with embeddings  
 - ✅ Smart memory deduplication
 - ✅ AI agent with tool system
+- ✅ Modular prompt system and user preferences
 - 🔄 Document processor implementation
 - 🔄 Facts management system testing
 
@@ -360,6 +454,7 @@ pnpm db:studio        # Open Drizzle Studio
 - Cross-reference fact detection
 - Memory categorization improvements
 - Performance optimization for large datasets
+- Advanced preference system (themes, custom behaviors)
 
 ### **Phase 3: Multi-Platform**
 - Slack gateway implementation
@@ -386,12 +481,21 @@ pnpm db:studio        # Open Drizzle Studio
 4. **Platform Independence**: Business logic works anywhere
 5. **Type Safety**: Catch errors at compile time, not runtime
 6. **Clean Architecture**: Easy to test, extend, and maintain
+7. **Modular Composition**: Reusable utilities and composable components
 
 ### **AI Integration Standards**
 - **Structured Outputs**: All OpenAI calls use Zod schemas
 - **Error Resilience**: Graceful degradation when services fail
 - **Context Awareness**: Personal memories enhance every interaction
 - **Tool Composition**: Agent capabilities grow through tool additions
+- **Personalization**: User preferences shape AI behavior and responses
+
+### **Code Quality Standards**
+- **Build Small, Grow On Demand**: Start with minimal implementations
+- **No Duplication**: Extract abstractions only when pain is felt twice
+- **String Builder Pattern**: Conditional composition over complex concatenation
+- **Functional Approach**: Prefer pure functions and immutable patterns
+- **Type-First Development**: Types guide implementation and catch errors early
 
 ---
 

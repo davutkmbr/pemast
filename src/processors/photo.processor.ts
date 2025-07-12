@@ -20,7 +20,7 @@ const PhotoAnalysisSchema = z.object({
     .describe("Type of content (document, photo, chart, whiteboard, screenshot, etc.)"),
   extractedText: z
     .string()
-    .nullable()
+    .nullish()
     .describe("All readable text from the image. If no text found, return null"),
   description: z.string().describe("Clear description of what is visible in the image"),
   keyInsights: z

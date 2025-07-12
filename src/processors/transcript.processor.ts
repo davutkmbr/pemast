@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import OpenAI from "openai";
 
 export interface TranscriptConfig {
   openaiApiKey: string;
@@ -30,41 +30,40 @@ export class TranscriptProcessor {
   async transcribeAudio(audioFile: AudioFile): Promise<TranscriptResult> {
     try {
       console.log(`Transcribing audio file: ${audioFile.fileName} (${audioFile.mimeType})`);
-      
+
       // Convert ArrayBuffer to File object for OpenAI API
       const file = new File([audioFile.buffer], audioFile.fileName, {
         type: audioFile.mimeType,
       });
-      
+
       // Transcribe using OpenAI Whisper
       const transcription = await this.openai.audio.transcriptions.create({
         file: file,
-        model: 'gpt-4o-mini-transcribe',
+        model: "gpt-4o-mini-transcribe",
         // language: 'en', // Auto-detect language
-        response_format: 'json', // Get additional metadata
+        response_format: "json", // Get additional metadata
       });
-      
+
       if (!transcription.text || transcription.text.trim().length === 0) {
-        throw new Error('Empty transcription received');
+        throw new Error("Empty transcription received");
       }
-      
+
       console.log(`✅ Successfully transcribed: "${transcription.text.substring(0, 100)}..."`);
-      
+
       return {
         text: transcription.text.trim(),
         duration: audioFile.duration,
         confidence: 1.0, // Transcription doesn't provide confidence scores
         error: undefined,
       };
-      
     } catch (error) {
-      console.error('❌ Transcription error:', error);
-      
+      console.error("❌ Transcription error:", error);
+
       return {
-        text: '',
+        text: "",
         duration: audioFile.duration,
         confidence: undefined,
-        error: error instanceof Error ? error.message : 'Unknown transcription error',
+        error: error instanceof Error ? error.message : "Unknown transcription error",
       };
     }
   }
@@ -72,16 +71,16 @@ export class TranscriptProcessor {
   // Utility method to check if a file type is supported
   isAudioFile(mimeType: string): boolean {
     const supportedTypes = [
-      'audio/mpeg',     // MP3
-      'audio/mp3',      // MP3 (alternative)
-      'audio/ogg',      // OGG (Telegram voice)
-      'audio/wav',      // WAV
-      'audio/m4a',      // M4A
-      'audio/aac',      // AAC
-      'audio/flac',     // FLAC
-      'audio/webm',     // WebM
+      "audio/mpeg", // MP3
+      "audio/mp3", // MP3 (alternative)
+      "audio/ogg", // OGG (Telegram voice)
+      "audio/wav", // WAV
+      "audio/m4a", // M4A
+      "audio/aac", // AAC
+      "audio/flac", // FLAC
+      "audio/webm", // WebM
     ];
-    
+
     return supportedTypes.includes(mimeType.toLowerCase());
   }
 
@@ -89,4 +88,4 @@ export class TranscriptProcessor {
   getMaxFileSize(): number {
     return 25 * 1024 * 1024; // 25MB in bytes
   }
-} 
+}

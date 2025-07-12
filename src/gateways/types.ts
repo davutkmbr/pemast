@@ -1,5 +1,5 @@
-import type { Context } from 'telegraf';
-import type { ProcessedMessage, UserContext } from '../types/index.js';
+import type { Context } from "telegraf";
+import type { ProcessedMessage, UserContext } from "../types/index.js";
 
 /**
  * Modern message processor interface
@@ -16,4 +16,4 @@ export interface MessageProcessor {
 export interface MessageExtractor {
   extractMessage(ctx: Context, messageType: string): Promise<ProcessedMessage>;
   extractUserContext(ctx: Context): UserContext;
-} 
+}

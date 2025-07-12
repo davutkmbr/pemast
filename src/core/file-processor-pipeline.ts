@@ -1,6 +1,6 @@
-import type { FileReference, ProcessedMessage } from '../types/index.js';
-import type { FileType, GatewayType, MessageType } from '../types/index.js';
-import { FileService } from '../services/file.service.js';
+import type { FileReference, ProcessedMessage } from "../types/index.js";
+import type { FileType, GatewayType, MessageType } from "../types/index.js";
+import { FileService } from "../services/file.service.js";
 
 /**
  * Generic file processing pipeline
@@ -16,7 +16,7 @@ export interface FileProcessorPipeline<TFile, TResult> {
     gatewayMessageId: string,
     timestamp: Date,
     storedFileId: string,
-    originalCaption?: string
+    originalCaption?: string,
   ): ProcessedMessage;
 }
 
@@ -31,7 +31,7 @@ export class CoreFileProcessorPipeline<TFile, TResult> {
     private pipeline: FileProcessorPipeline<TFile, TResult>,
     private fileType: FileType,
     private messageType: MessageType, // Add separate messageType for ProcessedMessage
-    private gatewayType: GatewayType
+    private gatewayType: GatewayType,
   ) {
     this.fileService = new FileService();
   }
@@ -74,12 +74,11 @@ export class CoreFileProcessorPipeline<TFile, TResult> {
         gatewayMessageId,
         timestamp,
         storedFileId,
-        originalCaption
+        originalCaption,
       );
-
     } catch (error) {
       console.error(`Error in ${this.fileType} processing pipeline:`, error);
-      
+
       // Return fallback processed message
       const fileReference: FileReference = {
         id: fileId,
@@ -97,9 +96,9 @@ export class CoreFileProcessorPipeline<TFile, TResult> {
         fileReference,
         processingMetadata: {
           processor: this.fileType,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: error instanceof Error ? error.message : "Unknown error",
         },
-        processingStatus: 'failed',
+        processingStatus: "failed",
       };
     }
   }
@@ -112,7 +111,7 @@ export class CoreFileProcessorPipeline<TFile, TResult> {
     file: { buffer: ArrayBuffer; fileName: string; mimeType: string },
     fileName: string,
     mimeType: string,
-    telegramFileId: string
+    telegramFileId: string,
   ): Promise<string> {
     try {
       const fileId = await this.fileService.createFileWithUpload(
@@ -121,15 +120,17 @@ export class CoreFileProcessorPipeline<TFile, TResult> {
         mimeType,
         this.fileType,
         telegramFileId,
-        this.gatewayType
+        this.gatewayType,
       );
-      
+
       console.log(`✅ ${this.fileType} file uploaded and stored: ${fileId} (${fileName})`);
-      
+
       return fileId;
     } catch (error) {
       console.error(`Error storing ${this.fileType} file:`, error);
-      throw new Error(`Failed to store ${this.fileType} file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to store ${this.fileType} file: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
-} 
+}

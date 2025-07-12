@@ -1,6 +1,6 @@
-import { sql, and, SQL } from 'drizzle-orm';
-import { db } from '../db/client.js';
-import type { VectorSearchResult } from '../types/index.js';
+import { sql, and, SQL } from "drizzle-orm";
+import { db } from "../db/client.js";
+import type { VectorSearchResult } from "../types/index.js";
 
 /**
  * Generic helper to perform pgvector cosine-distance searches on any table.
@@ -34,7 +34,7 @@ export async function vectorSearch<T>(params: {
   }
 
   // Build vector expression strings
-  const vectorStr = `[${queryEmbedding.join(',')}]`;
+  const vectorStr = `[${queryEmbedding.join(",")}]`;
   const distanceExpr = sql`(${embeddingColumn} <=> ${vectorStr}::vector)`;
   const similarityExpr = sql`(1 - (${embeddingColumn} <=> ${vectorStr}::vector))`;
 
@@ -62,4 +62,4 @@ export async function vectorSearch<T>(params: {
       similarity: Number(similarity),
     } as VectorSearchResult<T>;
   });
-} 
+}

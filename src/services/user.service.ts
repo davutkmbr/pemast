@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm';
-import { db } from '../db/client.js';
-import { users } from '../db/schema.js';
+import { eq } from "drizzle-orm";
+import { db } from "../db/client.js";
+import { users } from "../db/schema.js";
 
 export interface CreateUserParams {
   externalId: string;
@@ -22,26 +22,30 @@ export interface UserInfo {
  * Service for managing users across different gateways
  */
 export class UserService {
-  
   /**
    * Create a new user
    */
   async createUser(params: CreateUserParams): Promise<string> {
     try {
-      const [createdUser] = await db.insert(users).values({
-        externalId: params.externalId,
-        displayName: params.displayName,
-        email: params.email,
-      }).returning({ id: users.id });
+      const [createdUser] = await db
+        .insert(users)
+        .values({
+          externalId: params.externalId,
+          displayName: params.displayName,
+          email: params.email,
+        })
+        .returning({ id: users.id });
 
       if (!createdUser) {
-        throw new Error('Failed to create user - no result returned');
+        throw new Error("Failed to create user - no result returned");
       }
 
       return createdUser.id;
     } catch (error) {
-      console.error('Error creating user:', error);
-      throw new Error(`Failed to create user: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error creating user:", error);
+      throw new Error(
+        `Failed to create user: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -69,8 +73,10 @@ export class UserService {
       const userId = await this.createUser(createParams);
       return userId;
     } catch (error) {
-      console.error('Error getting or creating user:', error);
-      throw new Error(`Failed to get user: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error getting or creating user:", error);
+      throw new Error(
+        `Failed to get user: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -79,11 +85,7 @@ export class UserService {
    */
   async getUser(userId: string): Promise<UserInfo | null> {
     try {
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
+      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
 
       if (!user) {
         return null;
@@ -99,8 +101,10 @@ export class UserService {
         updatedAt: user.updatedAt ?? new Date(),
       };
     } catch (error) {
-      console.error('Error fetching user:', error);
-      throw new Error(`Failed to fetch user: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error fetching user:", error);
+      throw new Error(
+        `Failed to fetch user: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -109,11 +113,7 @@ export class UserService {
    */
   async getUserByExternalId(externalId: string): Promise<UserInfo | null> {
     try {
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.externalId, externalId))
-        .limit(1);
+      const [user] = await db.select().from(users).where(eq(users.externalId, externalId)).limit(1);
 
       if (!user) {
         return null;
@@ -129,8 +129,10 @@ export class UserService {
         updatedAt: user.updatedAt ?? new Date(),
       };
     } catch (error) {
-      console.error('Error fetching user by external ID:', error);
-      throw new Error(`Failed to fetch user: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error fetching user by external ID:", error);
+      throw new Error(
+        `Failed to fetch user: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -143,13 +145,12 @@ export class UserService {
       if (updates.displayName !== undefined) updateData.displayName = updates.displayName;
       if (updates.email !== undefined) updateData.email = updates.email;
 
-      await db
-        .update(users)
-        .set(updateData)
-        .where(eq(users.id, userId));
+      await db.update(users).set(updateData).where(eq(users.id, userId));
     } catch (error) {
-      console.error('Error updating user:', error);
-      throw new Error(`Failed to update user: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error updating user:", error);
+      throw new Error(
+        `Failed to update user: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -160,14 +161,16 @@ export class UserService {
     try {
       await db
         .update(users)
-        .set({ 
+        .set({
           isActive: false,
           updatedAt: new Date(),
         })
         .where(eq(users.id, userId));
     } catch (error) {
-      console.error('Error deactivating user:', error);
-      throw new Error(`Failed to deactivate user: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error deactivating user:", error);
+      throw new Error(
+        `Failed to deactivate user: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
-} 
+}

@@ -1,25 +1,25 @@
-import { MessageService } from './message.service.js';
-import { UserService } from './user.service.js';
-import { ProjectService } from './project.service.js';
-import { ChannelService } from './channel.service.js';
-import { MemoryService } from './memory.service.js';
-import type { 
-  ProcessedMessage, 
-  DatabaseContext, 
-  GatewayType, 
+import { MessageService } from "./message.service.js";
+import { UserService } from "./user.service.js";
+import { ProjectService } from "./project.service.js";
+import { ChannelService } from "./channel.service.js";
+import { MemoryService } from "./memory.service.js";
+import type {
+  ProcessedMessage,
+  DatabaseContext,
+  GatewayType,
   UserContext,
   MessageProcessingResult,
-  CreateMemoryInput 
-} from '../types/index.js';
+  CreateMemoryInput,
+} from "../types/index.js";
 
 /**
  * Generic message processing service that handles the complete pipeline:
  * 1. User resolution/creation
- * 2. Project resolution/creation  
+ * 2. Project resolution/creation
  * 3. Channel resolution/creation
  * 4. Message storage
  * 5. Memory creation (for file-based content)
- * 
+ *
  * This service is gateway-agnostic and can be used by any platform (Telegram, Slack, etc.)
  */
 export class MessageProcessingService {
@@ -43,7 +43,7 @@ export class MessageProcessingService {
   async processMessage(
     processedMessage: ProcessedMessage,
     userContext: UserContext,
-    gatewayType: GatewayType
+    gatewayType: GatewayType,
   ): Promise<MessageProcessingResult> {
     try {
       console.log(`Processing ${gatewayType} message from user ${userContext.externalUserId}`);
@@ -59,7 +59,7 @@ export class MessageProcessingService {
         projectId,
         gatewayType,
         userContext.chatId,
-        this.getChatName(userContext)
+        this.getChatName(userContext),
       );
 
       // Step 4: Create database context
@@ -70,7 +70,7 @@ export class MessageProcessingService {
       };
 
       // Step 5: Save message to database
-      const messageId = await this.messageService.saveMessage(processedMessage, context, 'user');
+      const messageId = await this.messageService.saveMessage(processedMessage, context, "user");
 
       // Step 6: Create memory for file-based content (photos, documents, audio files)
       if (this.shouldCreateMemory(processedMessage)) {
@@ -84,15 +84,14 @@ export class MessageProcessingService {
         context,
         success: true,
       };
-
     } catch (error) {
-      console.error('Error processing message:', error);
-      
+      console.error("Error processing message:", error);
+
       return {
-        messageId: '',
-        context: { projectId: '', userId: '', channelId: '' },
+        messageId: "",
+        context: { projectId: "", userId: "", channelId: "" },
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
@@ -104,7 +103,7 @@ export class MessageProcessingService {
    */
   private shouldCreateMemory(message: ProcessedMessage): boolean {
     // Voice messages only get transcription in messages.content, no memory
-    if (message.messageType === 'voice') {
+    if (message.messageType === "voice") {
       return false;
     }
 
@@ -122,15 +121,15 @@ export class MessageProcessingService {
   private async createMemoryFromMessage(
     messageId: string,
     message: ProcessedMessage,
-    context: DatabaseContext
+    context: DatabaseContext,
   ): Promise<void> {
     try {
       const metadata = message.processingMetadata || {};
-      
+
       // Extract summary and insights from processing metadata
       const summary = this.extractSummary(message, metadata);
       const tags = this.extractTags(message, metadata);
-      
+
       const memoryInput: CreateMemoryInput = {
         messageId,
         content: this.buildMemoryContent(message, metadata),
@@ -151,9 +150,8 @@ export class MessageProcessingService {
 
       const memoryId = await this.memoryService.createMemory(memoryInput, context);
       console.log(`✅ Memory created for message ${messageId}: ${memoryId}`);
-      
     } catch (error) {
-      console.error('Error creating memory from message:', error);
+      console.error("Error creating memory from message:", error);
       // Don't throw - memory creation failure shouldn't break message processing
     }
   }
@@ -163,33 +161,33 @@ export class MessageProcessingService {
    */
   private buildMemoryContent(message: ProcessedMessage, metadata: any): string {
     const parts: string[] = [];
-    
+
     // Add original message content
-    if (message.content && message.content !== '[Photo analyzed]') {
+    if (message.content && message.content !== "[Photo analyzed]") {
       parts.push(`Content: ${message.content}`);
     }
-    
+
     // Add extracted text (OCR, document parsing)
     if (metadata.extractedText) {
       parts.push(`Extracted Text: ${metadata.extractedText}`);
     }
-    
+
     // Add AI-generated description
     if (metadata.description) {
       parts.push(`Description: ${metadata.description}`);
     }
-    
+
     // Add key insights
     if (metadata.keyInsights && Array.isArray(metadata.keyInsights)) {
-      parts.push(`Key Insights: ${metadata.keyInsights.join(', ')}`);
+      parts.push(`Key Insights: ${metadata.keyInsights.join(", ")}`);
     }
-    
+
     // Add file information
     if (message.fileReference) {
       parts.push(`File: ${message.fileReference.fileName} (${message.fileReference.mimeType})`);
     }
-    
-    return parts.join('\n\n');
+
+    return parts.join("\n\n");
   }
 
   /**
@@ -200,18 +198,18 @@ export class MessageProcessingService {
     if (metadata.summary) {
       return metadata.summary;
     }
-    
+
     // For photos, use description as summary
     if (metadata.description) {
       return metadata.description;
     }
-    
+
     // Fallback to content summary
     if (message.content && message.content.length > 100) {
-      return message.content.substring(0, 97) + '...';
+      return message.content.substring(0, 97) + "...";
     }
-    
-    return message.content || 'Processed file content';
+
+    return message.content || "Processed file content";
   }
 
   /**
@@ -219,30 +217,30 @@ export class MessageProcessingService {
    */
   private extractTags(message: ProcessedMessage, metadata: any): string[] {
     const tags: string[] = [];
-    
+
     // Add processor type as tag
     if (metadata.processor) {
       tags.push(metadata.processor);
     }
-    
+
     // Add content type as tag
     if (metadata.contentType) {
       tags.push(metadata.contentType);
     }
-    
+
     // Add file type based on mime type
     if (message.fileReference?.mimeType) {
       const mimeType = message.fileReference.mimeType;
-      if (mimeType.startsWith('image/')) tags.push('image');
-      if (mimeType.startsWith('audio/')) tags.push('audio');
-      if (mimeType.startsWith('video/')) tags.push('video');
-      if (mimeType.includes('pdf')) tags.push('pdf');
-      if (mimeType.includes('document')) tags.push('document');
+      if (mimeType.startsWith("image/")) tags.push("image");
+      if (mimeType.startsWith("audio/")) tags.push("audio");
+      if (mimeType.startsWith("video/")) tags.push("video");
+      if (mimeType.includes("pdf")) tags.push("pdf");
+      if (mimeType.includes("document")) tags.push("document");
     }
-    
+
     // Add message type as tag
     tags.push(message.messageType);
-    
+
     return [...new Set(tags)]; // Remove duplicates
   }
 
@@ -251,11 +249,11 @@ export class MessageProcessingService {
    */
   private async getUserId(userContext: UserContext): Promise<string> {
     const displayName = this.buildDisplayName(userContext);
-    
+
     return await this.userService.getOrCreateUser(
       userContext.externalUserId,
       displayName,
-      undefined // email - not available from most chat platforms
+      undefined, // email - not available from most chat platforms
     );
   }
 
@@ -273,13 +271,13 @@ export class MessageProcessingService {
     projectId: string,
     gatewayType: GatewayType,
     externalChatId: string,
-    chatName?: string
+    chatName?: string,
   ): Promise<string> {
     return await this.channelService.getOrCreateChannel(
       projectId,
       gatewayType,
       externalChatId,
-      chatName
+      chatName,
     );
   }
 
@@ -288,18 +286,18 @@ export class MessageProcessingService {
    */
   private buildDisplayName(userContext: UserContext): string {
     const parts: string[] = [];
-    
+
     if (userContext.firstName) parts.push(userContext.firstName);
     if (userContext.lastName) parts.push(userContext.lastName);
-    
+
     if (parts.length > 0) {
-      return parts.join(' ');
+      return parts.join(" ");
     }
-    
+
     if (userContext.username) {
       return `@${userContext.username}`;
     }
-    
+
     return `User ${userContext.externalUserId}`;
   }
 
@@ -317,7 +315,7 @@ export class MessageProcessingService {
   async getConversationContext(
     userContext: UserContext,
     gatewayType: GatewayType,
-    limit: number = 5
+    limit: number = 5,
   ): Promise<{
     context: DatabaseContext | null;
     recentMessages: any[];
@@ -329,30 +327,29 @@ export class MessageProcessingService {
       const channelId = await this.channelService.getOrCreateChannel(
         projectId,
         gatewayType,
-        userContext.chatId
+        userContext.chatId,
       );
 
       const context: DatabaseContext = { projectId, userId, channelId };
-      
+
       // Get recent messages
       const recentMessages = await this.messageService.getConversationContext(
         userId,
         projectId,
         channelId,
-        limit
+        limit,
       );
 
       return {
         context,
         recentMessages,
       };
-
     } catch (error) {
-      console.error('Error getting conversation context:', error);
+      console.error("Error getting conversation context:", error);
       return {
         context: null,
         recentMessages: [],
       };
     }
   }
-} 
+}

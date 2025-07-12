@@ -1,7 +1,7 @@
-import { eq, and } from 'drizzle-orm';
-import { db } from '../db/client.js';
-import { channels } from '../db/schema.js';
-import type { GatewayType } from '../types/index.js';
+import { eq, and } from "drizzle-orm";
+import { db } from "../db/client.js";
+import { channels } from "../db/schema.js";
+import type { GatewayType } from "../types/index.js";
 
 export interface CreateChannelParams {
   projectId: string;
@@ -24,27 +24,31 @@ export interface ChannelInfo {
  * Service for managing channels (gateway-specific chat connections)
  */
 export class ChannelService {
-  
   /**
    * Create a new channel
    */
   async createChannel(params: CreateChannelParams): Promise<string> {
     try {
-      const [createdChannel] = await db.insert(channels).values({
-        projectId: params.projectId,
-        gatewayType: params.gatewayType,
-        externalChatId: params.externalChatId,
-        name: params.name,
-      }).returning({ id: channels.id });
+      const [createdChannel] = await db
+        .insert(channels)
+        .values({
+          projectId: params.projectId,
+          gatewayType: params.gatewayType,
+          externalChatId: params.externalChatId,
+          name: params.name,
+        })
+        .returning({ id: channels.id });
 
       if (!createdChannel) {
-        throw new Error('Failed to create channel - no result returned');
+        throw new Error("Failed to create channel - no result returned");
       }
 
       return createdChannel.id;
     } catch (error) {
-      console.error('Error creating channel:', error);
-      throw new Error(`Failed to create channel: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error creating channel:", error);
+      throw new Error(
+        `Failed to create channel: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -56,18 +60,20 @@ export class ChannelService {
     projectId: string,
     gatewayType: GatewayType,
     externalChatId: string,
-    chatName?: string
+    chatName?: string,
   ): Promise<string> {
     try {
       // Look for existing channel
       const [existingChannel] = await db
         .select({ id: channels.id })
         .from(channels)
-        .where(and(
-          eq(channels.projectId, projectId),
-          eq(channels.gatewayType, gatewayType),
-          eq(channels.externalChatId, externalChatId)
-        ))
+        .where(
+          and(
+            eq(channels.projectId, projectId),
+            eq(channels.gatewayType, gatewayType),
+            eq(channels.externalChatId, externalChatId),
+          ),
+        )
         .limit(1);
 
       if (existingChannel) {
@@ -84,8 +90,10 @@ export class ChannelService {
 
       return channelId;
     } catch (error) {
-      console.error('Error getting or creating channel:', error);
-      throw new Error(`Failed to get channel: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error getting or creating channel:", error);
+      throw new Error(
+        `Failed to get channel: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -94,11 +102,7 @@ export class ChannelService {
    */
   async getChannel(channelId: string): Promise<ChannelInfo | null> {
     try {
-      const [channel] = await db
-        .select()
-        .from(channels)
-        .where(eq(channels.id, channelId))
-        .limit(1);
+      const [channel] = await db.select().from(channels).where(eq(channels.id, channelId)).limit(1);
 
       if (!channel) {
         return null;
@@ -106,7 +110,7 @@ export class ChannelService {
 
       return {
         id: channel.id,
-        projectId: channel.projectId!,  // Non-null assertion since it's required in DB
+        projectId: channel.projectId!, // Non-null assertion since it's required in DB
         gatewayType: channel.gatewayType,
         externalChatId: channel.externalChatId,
         name: channel.name,
@@ -114,8 +118,10 @@ export class ChannelService {
         createdAt: channel.createdAt ?? new Date(),
       };
     } catch (error) {
-      console.error('Error fetching channel:', error);
-      throw new Error(`Failed to fetch channel: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error fetching channel:", error);
+      throw new Error(
+        `Failed to fetch channel: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -124,16 +130,15 @@ export class ChannelService {
    */
   async getChannelByExternalId(
     gatewayType: GatewayType,
-    externalChatId: string
+    externalChatId: string,
   ): Promise<ChannelInfo | null> {
     try {
       const [channel] = await db
         .select()
         .from(channels)
-        .where(and(
-          eq(channels.gatewayType, gatewayType),
-          eq(channels.externalChatId, externalChatId)
-        ))
+        .where(
+          and(eq(channels.gatewayType, gatewayType), eq(channels.externalChatId, externalChatId)),
+        )
         .limit(1);
 
       if (!channel) {
@@ -142,7 +147,7 @@ export class ChannelService {
 
       return {
         id: channel.id,
-        projectId: channel.projectId!,  // Non-null assertion since it's required in DB
+        projectId: channel.projectId!, // Non-null assertion since it's required in DB
         gatewayType: channel.gatewayType,
         externalChatId: channel.externalChatId,
         name: channel.name,
@@ -150,8 +155,10 @@ export class ChannelService {
         createdAt: channel.createdAt ?? new Date(),
       };
     } catch (error) {
-      console.error('Error fetching channel by external ID:', error);
-      throw new Error(`Failed to fetch channel: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error fetching channel by external ID:", error);
+      throw new Error(
+        `Failed to fetch channel: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -160,13 +167,12 @@ export class ChannelService {
    */
   async updateChannelName(channelId: string, name: string): Promise<void> {
     try {
-      await db
-        .update(channels)
-        .set({ name })
-        .where(eq(channels.id, channelId));
+      await db.update(channels).set({ name }).where(eq(channels.id, channelId));
     } catch (error) {
-      console.error('Error updating channel name:', error);
-      throw new Error(`Failed to update channel: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error updating channel name:", error);
+      throw new Error(
+        `Failed to update channel: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
@@ -175,13 +181,12 @@ export class ChannelService {
    */
   async deactivateChannel(channelId: string): Promise<void> {
     try {
-      await db
-        .update(channels)
-        .set({ isActive: false })
-        .where(eq(channels.id, channelId));
+      await db.update(channels).set({ isActive: false }).where(eq(channels.id, channelId));
     } catch (error) {
-      console.error('Error deactivating channel:', error);
-      throw new Error(`Failed to deactivate channel: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error deactivating channel:", error);
+      throw new Error(
+        `Failed to deactivate channel: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
-} 
+}

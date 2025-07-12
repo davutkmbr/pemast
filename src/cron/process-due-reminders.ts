@@ -8,49 +8,54 @@ declare const Deno: {
   };
 };
 
-import { ReminderService } from '../services/reminder.service.js';
+import { ReminderService } from "../services/reminder.service.js";
 
 // Edge Function handler
 export default async function handler(req: Request): Promise<Response> {
   // Only allow POST requests from cron
-  if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 });
+  if (req.method !== "POST") {
+    return new Response("Method not allowed", { status: 405 });
   }
 
   // Optional: Add authentication/authorization here
-  const authHeader = req.headers.get('Authorization');
-  if (authHeader !== `Bearer ${Deno.env.get('CRON_SECRET')}`) {
-    return new Response('Unauthorized', { status: 401 });
+  const authHeader = req.headers.get("Authorization");
+  if (authHeader !== `Bearer ${Deno.env.get("CRON_SECRET")}`) {
+    return new Response("Unauthorized", { status: 401 });
   }
 
   try {
-    console.log('🕐 Starting due reminders processing...');
-    
+    console.log("🕐 Starting due reminders processing...");
+
     const reminderService = new ReminderService();
     const results = await reminderService.processAllDueReminders();
-    
-    console.log('✅ Due reminders processing completed:', results);
-    
-    return new Response(JSON.stringify({
-      success: true,
-      timestamp: new Date().toISOString(),
-      results
-    }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
 
+    console.log("✅ Due reminders processing completed:", results);
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        timestamp: new Date().toISOString(),
+        results,
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   } catch (error) {
-    console.error('❌ Error processing due reminders:', error);
-    
-    return new Response(JSON.stringify({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
-    }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    console.error("❌ Error processing due reminders:", error);
+
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 }
 
@@ -77,4 +82,4 @@ SELECT * FROM cron.job;
 
 -- Remove job if needed
 -- SELECT cron.unschedule('process-due-reminders');
-*/ 
+*/

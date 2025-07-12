@@ -1,9 +1,14 @@
-import { run, user as userMessage, assistant as assistantMessage, system as systemMessage } from "@openai/agents";
+import {
+  run,
+  user as userMessage,
+  assistant as assistantMessage,
+  system as systemMessage,
+} from "@openai/agents";
 import { mainAgent } from "../agent/main-agent.js";
 import { MessageService } from "../services/message.service.js";
 import { MemoryService } from "../services/memory.service.js";
 import type { DatabaseContext, GatewayContext, ProcessedMessage } from "../types/index.js";
-import type { ReplyGenerator } from './message-pipeline.js';
+import type { ReplyGenerator } from "./message-pipeline.js";
 
 /**
  * Platform-agnostic reply generator
@@ -25,7 +30,7 @@ export class CoreReplyGenerator implements ReplyGenerator {
   async generateReply(
     messageContent: string,
     context: DatabaseContext | GatewayContext,
-    options: { limit?: number } = {}
+    options: { limit?: number } = {},
   ): Promise<string> {
     const limit = options.limit ?? 10;
 
@@ -41,14 +46,14 @@ export class CoreReplyGenerator implements ReplyGenerator {
       dbCtx.userId,
       dbCtx.projectId,
       dbCtx.channelId,
-      limit
+      limit,
     );
 
     // Fetch personal context memories
     const personalMemories = await this.memoryService.getPersonalContext(
       dbCtx.userId,
       dbCtx.projectId,
-      15 // Get up to 15 personal context items
+      15, // Get up to 15 personal context items
     );
 
     // Format personal context for prompt
@@ -56,10 +61,14 @@ export class CoreReplyGenerator implements ReplyGenerator {
 
     // Build agent input with personal context first
     const inputItems = [];
-    
+
     // Add personal context as system message if available
     if (personalMemories.length > 0) {
-      inputItems.push(systemMessage(`IMPORTANT: Here is what you know about this user personally. Use this information to provide more personalized responses:\n\n${personalContext}`));
+      inputItems.push(
+        systemMessage(
+          `IMPORTANT: Here is what you know about this user personally. Use this information to provide more personalized responses:\n\n${personalContext}`,
+        ),
+      );
     }
 
     // Add conversation history (chronological order)
@@ -67,7 +76,7 @@ export class CoreReplyGenerator implements ReplyGenerator {
       .reverse() // DB returns newest first → reverse to chronological
       .forEach((m) => {
         inputItems.push(
-          m.role === 'assistant' ? assistantMessage(m.content) : userMessage(m.content)
+          m.role === "assistant" ? assistantMessage(m.content) : userMessage(m.content),
         );
       });
 
@@ -75,18 +84,21 @@ export class CoreReplyGenerator implements ReplyGenerator {
     inputItems.push(userMessage(messageContent));
 
     // Run agent without streaming - pass the full context (GatewayContext if available)
-    const result = await run(mainAgent, inputItems, { 
-      stream: false, 
-      context 
+    const result = await run(mainAgent, inputItems, {
+      stream: false,
+      context,
     });
 
-    return result.finalOutput || '';
+    return result.finalOutput || "";
   }
 
   /**
    * Generate photo acknowledgment with personal context
    */
-  async generatePhotoAck(processedMessage: ProcessedMessage, context: DatabaseContext | GatewayContext): Promise<string> {
+  async generatePhotoAck(
+    processedMessage: ProcessedMessage,
+    context: DatabaseContext | GatewayContext,
+  ): Promise<string> {
     // Extract database context
     const dbCtx: DatabaseContext = {
       userId: context.userId,
@@ -101,23 +113,20 @@ export class CoreReplyGenerator implements ReplyGenerator {
     const personalMemories = await this.memoryService.getPersonalContext(
       dbCtx.userId,
       dbCtx.projectId,
-      10
+      10,
     );
 
-    const personalContext = personalMemories.length > 0 
-      ? this.memoryService.formatPersonalContextForPrompt(personalMemories)
-      : '';
+    const personalContext =
+      personalMemories.length > 0
+        ? this.memoryService.formatPersonalContextForPrompt(personalMemories)
+        : "";
 
     const promptSystem =
       "Kullanıcıya aşağıdaki fotoğrafla ilgili SAMİMİ, emojili ve en fazla 2 cümlelik Türkçe bir onay mesajı yaz. " +
       "Mesajın sonunda görseli kaydettiğini belirt." +
-      (personalContext ? `\n\nKullanıcı hakkında bildiğin bilgiler:\n${personalContext}` : '')
-    ;
+      (personalContext ? `\n\nKullanıcı hakkında bildiğin bilgiler:\n${personalContext}` : "");
 
-    const messages = [
-      systemMessage(promptSystem),
-      userMessage(`Fotoğrafın tanımı: ${desc}`),
-    ];
+    const messages = [systemMessage(promptSystem), userMessage(`Fotoğrafın tanımı: ${desc}`)];
 
     try {
       const result = await run(mainAgent, messages, { stream: false, context });
@@ -129,4 +138,4 @@ export class CoreReplyGenerator implements ReplyGenerator {
       return `📸 ${desc} — Kaydettim!`;
     }
   }
-} 
+}

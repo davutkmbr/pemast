@@ -1,10 +1,10 @@
 import "dotenv/config";
 import {
   TelegramGateway,
-  TelegramVoiceProcessor,
   TelegramPhotoProcessor,
+  TelegramVoiceProcessor,
 } from "./gateways/index.js";
-import { TranscriptProcessor, PhotoProcessor } from "./processors/index.js";
+import { PhotoProcessor, TranscriptProcessor } from "./processors/index.js";
 
 async function main() {
   const telegramToken = process.env.TELEGRAM_BOT_TOKEN;

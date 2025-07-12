@@ -22,6 +22,7 @@ export const UserPreferenceKeySchema = z.enum([
   "emoji_usage",
   "reminder_format",
   "reminder_time_preference",
+  "text_case",
 ]);
 export type UserPreferenceKey = z.infer<typeof UserPreferenceKeySchema>;
 
@@ -38,6 +39,7 @@ export const USER_PREFERENCE_KEYS = {
   EMOJI_USAGE: "emoji_usage",
   REMINDER_FORMAT: "reminder_format",
   REMINDER_TIME_PREFERENCE: "reminder_time_preference",
+  TEXT_CASE: "text_case",
 } as const;
 
 /**
@@ -64,6 +66,7 @@ export const GreetingStyleSchema = z.enum(["formal", "casual", "warm", "professi
 export const EmojiUsageSchema = z.enum(["none", "minimal", "moderate", "frequent"]);
 export const ReminderFormatSchema = z.enum(["simple", "detailed", "structured", "casual"]);
 export const ReminderTimePreferenceSchema = z.enum(["morning", "afternoon", "evening", "flexible"]);
+export const TextCaseSchema = z.enum(["normal", "lowercase"]);
 
 /**
  * Grouped user preference value schemas for easy access
@@ -78,6 +81,7 @@ export const USER_PREFERENCE_SCHEMAS = {
   emoji_usage: EmojiUsageSchema,
   reminder_format: ReminderFormatSchema,
   reminder_time_preference: ReminderTimePreferenceSchema,
+  text_case: TextCaseSchema,
 } as const;
 
 /**
@@ -93,6 +97,7 @@ export type UserPreferenceValueMap = {
   emoji_usage: z.infer<typeof EmojiUsageSchema>;
   reminder_format: z.infer<typeof ReminderFormatSchema>;
   reminder_time_preference: z.infer<typeof ReminderTimePreferenceSchema>;
+  text_case: z.infer<typeof TextCaseSchema>;
 };
 
 /**
@@ -107,7 +112,8 @@ export type TypedUserPreference =
   | { key: "greeting_style"; value: z.infer<typeof GreetingStyleSchema> }
   | { key: "emoji_usage"; value: z.infer<typeof EmojiUsageSchema> }
   | { key: "reminder_format"; value: z.infer<typeof ReminderFormatSchema> }
-  | { key: "reminder_time_preference"; value: z.infer<typeof ReminderTimePreferenceSchema> };
+  | { key: "reminder_time_preference"; value: z.infer<typeof ReminderTimePreferenceSchema> }
+  | { key: "text_case"; value: z.infer<typeof TextCaseSchema> };
 
 /**
  * For compatibility: object of possible values (for legacy code)
@@ -171,6 +177,10 @@ export const USER_PREFERENCE_VALUES = {
     AFTERNOON: "afternoon",
     EVENING: "evening",
     FLEXIBLE: "flexible",
+  },
+  TEXT_CASE: {
+    NORMAL: "normal",
+    LOWERCASE: "lowercase",
   },
 } as const;
 
@@ -405,6 +415,7 @@ export class UserPreferencesService {
       { key: "emoji_usage", value: "moderate" },
       { key: "reminder_format", value: "simple" },
       { key: "reminder_time_preference", value: "flexible" },
+      { key: "text_case", value: "normal" },
     ] as const;
   }
 }

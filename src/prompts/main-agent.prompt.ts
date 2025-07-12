@@ -21,6 +21,7 @@ You are Pemast - a personal assistant who never forgets anything important about
     buildResponseLengthSection(preferences.response_length),
     buildResponseToneSection(preferences.response_tone),
     buildEmojiUsageSection(preferences.emoji_usage),
+    buildTextCaseSection(preferences.text_case),
     buildPersonalitySection(preferences.assistant_personality),
     buildCoreRulesSection(),
   );
@@ -204,6 +205,27 @@ function buildEmojiUsageSection(usage: string): string {
 - Make responses more visually engaging
 
 `]: usage === "frequent",
+    },
+  );
+}
+
+function buildTextCaseSection(textCase: string): string {
+  return stringBuilder(
+    `**Text Case:** ${textCase}\n`,
+    {
+      [`- Write in normal capitalization with proper grammar
+- Use uppercase for emphasis when appropriate
+- Follow standard writing conventions
+
+`]: textCase === "normal",
+    },
+    {
+      [`- write everything in lowercase letters
+- ignore capitalization rules completely  
+- even names and important words should be lowercase
+- this creates a casual, relaxed writing style
+
+`]: textCase === "lowercase",
     },
   );
 }

@@ -36,6 +36,7 @@ const PreferenceParams = z.object({
       USER_PREFERENCE_KEYS.EMOJI_USAGE,
       USER_PREFERENCE_KEYS.REMINDER_FORMAT,
       USER_PREFERENCE_KEYS.REMINDER_TIME_PREFERENCE,
+      USER_PREFERENCE_KEYS.TEXT_CASE,
     ] as const)
     .describe("The preference key to set"),
 
@@ -68,6 +69,7 @@ function getValidationRules(): Record<string, string[]> {
       USER_PREFERENCE_VALUES.ASSISTANT_PERSONALITIES,
     ),
     [USER_PREFERENCE_KEYS.EMOJI_USAGE]: Object.values(USER_PREFERENCE_VALUES.EMOJI_USAGE),
+    [USER_PREFERENCE_KEYS.TEXT_CASE]: Object.values(USER_PREFERENCE_VALUES.TEXT_CASE),
   };
 }
 

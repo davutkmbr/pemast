@@ -5,18 +5,22 @@ import type { GatewayContext, Memory } from "../../types/index.js";
 
 /**
  * Tool: search_memory
- * Retrieves memories relevant to a user query. Focused on text content only.
- * For file retrieval, use the file_retriever tool instead.
+ * Retrieves memories relevant to a user query. Enhanced for ambiguous reference detection.
+ * Provides detailed analysis for Memory Agent decision making.
  */
 const SearchMemoryParams = z.object({
-  query: z.string().describe("User search query. Can be a question or keywords."),
+  query: z.string().describe("User search query. Can be a question, keywords, or person's name."),
   limit: z
     .number()
     .int()
     .min(1)
     .max(20)
-    .default(5)
+    .default(10)
     .describe("Maximum number of results to return (1-20). Optional."),
+  context: z
+    .string()
+    .nullish()
+    .describe("Additional context about what you're looking for (optional)."),
 });
 
 export type SearchMemoryParams = z.infer<typeof SearchMemoryParams>;
@@ -41,27 +45,161 @@ async function searchMemories(
 }
 
 /**
- * Process memories and generate text results
+ * Analyze search results for ambiguous references
  */
-function processMemories(memories: Memory[]): string[] {
+function analyzeAmbiguousReferences(
+  query: string,
+  memories: Memory[],
+): {
+  isAmbiguous: boolean;
+  analysis: string;
+  matches: Array<{ name: string; details: string; memoryId: string }>;
+} {
+  const queryLower = query.toLowerCase();
+
+  // Check if query is a simple first name that might be ambiguous
+  const isSimpleFirstName = /^[a-zA-ZçğıöşüÇĞIİÖŞÜ]+$/.test(queryLower) && queryLower.length > 2;
+
+  if (!isSimpleFirstName || memories.length <= 1) {
+    return {
+      isAmbiguous: false,
+      analysis: `Clear reference - ${memories.length} matches found`,
+      matches: [],
+    };
+  }
+
+  // Extract person matches from memories
+  const personMatches: Array<{ name: string; details: string; memoryId: string }> = [];
+
+  for (const memory of memories) {
+    const content = memory.content.toLowerCase();
+
+    // Look for the query name in the content
+    if (content.includes(queryLower)) {
+      // Try to extract more specific information
+      let personDetails = memory.content;
+      if (memory.summary) {
+        personDetails += ` (${memory.summary})`;
+      }
+
+      // Add tags context
+      if (memory.tags && memory.tags.length > 0) {
+        const relevantTags = memory.tags.filter((tag) => !["personal_info", "note"].includes(tag));
+        if (relevantTags.length > 0) {
+          personDetails += ` [Tags: ${relevantTags.join(", ")}]`;
+        }
+      }
+
+      personMatches.push({
+        name: queryLower,
+        details: personDetails,
+        memoryId: memory.id,
+      });
+    }
+  }
+
+  const isAmbiguous = personMatches.length > 1;
+
+  return {
+    isAmbiguous,
+    analysis: isAmbiguous
+      ? `Ambiguous reference: ${personMatches.length} different people named "${query}" found`
+      : `Clear reference: Only one person named "${query}" found`,
+    matches: personMatches,
+  };
+}
+
+/**
+ * Process memories and generate enhanced results with ambiguity analysis
+ */
+function processMemoriesWithAnalysis(
+  query: string,
+  memories: Memory[],
+): {
+  textResults: string[];
+  ambiguityAnalysis: ReturnType<typeof analyzeAmbiguousReferences>;
+} {
   const textResults: string[] = [];
 
   for (let i = 0; i < memories.length; i++) {
     const memory = memories[i];
-    if (!memory) continue; // Safety check
+    if (!memory) continue;
 
     // Add indicator if memory has a file
     const fileIndicator = memory.fileId ? " [📎 Has file]" : "";
-    textResults.push(`${i + 1}. ${memory.content}${fileIndicator}`);
+
+    // Add memory date if available
+    const dateInfo = memory.createdAt
+      ? ` (${new Date(memory.createdAt).toLocaleDateString()})`
+      : "";
+
+    textResults.push(`${i + 1}. ${memory.content}${fileIndicator}${dateInfo}`);
   }
 
-  return textResults;
+  const ambiguityAnalysis = analyzeAmbiguousReferences(query, memories);
+
+  return { textResults, ambiguityAnalysis };
+}
+
+/**
+ * Generate enhanced response for Memory Agent
+ */
+function generateEnhancedResponse(
+  query: string,
+  memories: Memory[],
+  textResults: string[],
+  ambiguityAnalysis: ReturnType<typeof analyzeAmbiguousReferences>,
+): string {
+  if (memories.length === 0) {
+    return `🔍 **SEARCH RESULTS**
+- **Query**: "${query}"
+- **Found**: No matching memories
+- **Analysis**: No existing information about "${query}"
+- **Recommendation**: Safe to proceed with new information storage`;
+  }
+
+  let response = `🔍 **SEARCH RESULTS**
+- **Query**: "${query}"
+- **Found**: ${memories.length} matching memories
+- **Analysis**: ${ambiguityAnalysis.analysis}
+
+📋 **MEMORIES FOUND:**
+${textResults.join("\n")}`;
+
+  if (ambiguityAnalysis.isAmbiguous) {
+    response += `
+
+⚠️ **AMBIGUITY DETECTED**
+- **Issue**: Multiple people with same name "${query}"
+- **Matches Found**:`;
+
+    ambiguityAnalysis.matches.forEach((match, index) => {
+      response += `\n  ${index + 1}. ${match.details}`;
+    });
+
+    response += `
+- **Recommendation**: Request clarification from user
+- **Suggested Question**: "Hangi ${query}'i kastediyorsun? Tam adı ve ilişkiniz nedir?"`;
+  } else if (memories.length === 1 && memories[0]) {
+    response += `
+
+✅ **CLEAR REFERENCE**
+- **Person**: Clearly identified
+- **Context**: ${memories[0].content}
+- **Recommendation**: Safe to add new information about this person`;
+  }
+
+  return response;
 }
 
 export const searchMemoryTool = tool({
   name: "search_memory",
-  description:
-    "Returns a list of stored memories that are relevant to the given query. Focuses on text content. For retrieving files, use the file_retriever tool instead.",
+  description: `Enhanced memory search tool that:
+- Searches for stored memories using semantic and text matching
+- Detects ambiguous references (multiple people with same name)
+- Provides detailed analysis for Memory Agent decision making
+- Recommends clarification when needed
+- Focuses on text content (use file_retriever for files)`,
   parameters: SearchMemoryParams,
   strict: true,
   execute: async (data: SearchMemoryParams, runContext?: RunContext<GatewayContext>) => {
@@ -79,13 +217,16 @@ export const searchMemoryTool = tool({
         data.limit,
       );
 
-      if (memories.length === 0) {
-        return "No matching memories found.";
-      }
+      // Process with enhanced analysis
+      const { textResults, ambiguityAnalysis } = processMemoriesWithAnalysis(data.query, memories);
 
-      // Process memories and generate response
-      const textResults = processMemories(memories);
-      const response = textResults.join("\n");
+      // Generate enhanced response for Memory Agent
+      const response = generateEnhancedResponse(
+        data.query,
+        memories,
+        textResults,
+        ambiguityAnalysis,
+      );
 
       return response;
     } catch (error) {

@@ -1,6 +1,6 @@
 import { type RunContext, tool } from "@openai/agents";
 import { z } from "zod";
-import { ReminderService } from "../../services/reminder.service.js";
+import { reminderService, ReminderService } from "../../services/reminder.service.js";
 import type { GatewayContext, Reminder } from "../../types/index.js";
 
 /**
@@ -163,8 +163,6 @@ async function listUpcomingReminders(
   reminders: Reminder[];
   totalCount: number;
 }> {
-  const reminderService = new ReminderService();
-
   // Get upcoming reminders
   const upcomingReminders = await reminderService.getUpcomingReminders(
     context.userId,

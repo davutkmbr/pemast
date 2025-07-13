@@ -419,3 +419,5 @@ export class UserPreferencesService {
     ] as const;
   }
 }
+
+export const userPreferencesService = new UserPreferencesService();

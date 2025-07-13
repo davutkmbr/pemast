@@ -1,6 +1,6 @@
 import { type RunContext, tool } from "@openai/agents";
 import { z } from "zod";
-import { ReminderService } from "../../services/reminder.service.js";
+import { reminderService } from "../../services/reminder.service.js";
 import type { CreateReminderInput, GatewayContext, RecurrenceType } from "../../types/index.js";
 
 /**
@@ -154,8 +154,6 @@ async function createReminder(
   params: CreateReminderParamsSchema,
   context: GatewayContext,
 ): Promise<string> {
-  const reminderService = new ReminderService();
-
   // Parse scheduled date
   let scheduledFor = parseDateTime(params.scheduledFor);
 

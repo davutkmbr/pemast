@@ -1,4 +1,4 @@
-import { UserPreferencesService } from "../../services/user-preferences.service.js";
+import { userPreferencesService } from "../../services/user-preferences.service.js";
 import type { DatabaseContext } from "../../types/index.js";
 import { buildSystemPrompt } from "../../utils/prompts.js";
 import { stringBuilder } from "../../utils/string-builder.js";
@@ -7,7 +7,7 @@ import { stringBuilder } from "../../utils/string-builder.js";
  * Generate the complete Reasoning Agent prompt - unified structure
  */
 export async function generateReasoningAgentPrompt(context: DatabaseContext): Promise<string> {
-  const preferences = await new UserPreferencesService().getPreferencesMap(context);
+  const preferences = await userPreferencesService.getPreferencesMap(context);
 
   const prompt = stringBuilder(
     // === FIXED SECTIONS ===

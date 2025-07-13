@@ -5,6 +5,7 @@ import {
   USER_PREFERENCE_VALUES,
   type UserPreferenceKey,
   UserPreferencesService,
+  userPreferencesService,
 } from "../../services/user-preferences.service.js";
 import type { DatabaseContext, GatewayContext } from "../../types/index.js";
 import {
@@ -104,7 +105,6 @@ function validatePreferenceValue(
 async function processSinglePreference(
   preference: PreferenceInput,
   dbContext: DatabaseContext,
-  userPreferencesService: UserPreferencesService,
 ): Promise<{ success: boolean; message: string }> {
   try {
     // Validate preference value
@@ -144,13 +144,12 @@ async function processPreferences(
 ): Promise<{ results: string[]; errors: string[] }> {
   const results: string[] = [];
   const errors: string[] = [];
-  const userPreferencesService = new UserPreferencesService();
 
   for (let i = 0; i < preferences.length; i++) {
     const pref = preferences[i];
     if (!pref) continue;
 
-    const result = await processSinglePreference(pref, dbContext, userPreferencesService);
+    const result = await processSinglePreference(pref, dbContext);
 
     if (result.success) {
       results.push(result.message);

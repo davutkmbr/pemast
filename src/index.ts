@@ -1,10 +1,32 @@
 import "dotenv/config";
+import cron from "node-cron";
 import {
   TelegramGateway,
   TelegramPhotoProcessor,
   TelegramVoiceProcessor,
 } from "./gateways/index.js";
 import { PhotoProcessor, TranscriptProcessor } from "./processors/index.js";
+import { reminderService } from "./services/reminder.service.js";
+
+// Cron job to process due reminders every minute
+cron.schedule("* * * * *", async () => {
+  try {
+    console.log("🕐 Starting scheduled reminder processing...");
+    const results = await reminderService.processAllDueReminders();
+
+    console.log("✅ Scheduled reminder processing completed:", {
+      totalProcessed: results.processed,
+      completed: results.completed,
+      rescheduled: results.rescheduled,
+      ended: results.ended,
+      notificationsSent: results.notificationsSent,
+      notificationsFailed: results.notificationsFailed,
+      errors: results.errors.length,
+    });
+  } catch (error) {
+    console.error("❌ Error in scheduled reminder processing:", error);
+  }
+});
 
 async function main() {
   const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -21,6 +43,7 @@ async function main() {
   }
 
   console.log("Starting personal assistant with refactored architecture...");
+  console.log("🕐 Reminder processing cron job is active (every minute)");
 
   // Initialize Telegram gateway V2 with dependency injection
   const telegramGateway = new TelegramGateway({ token: telegramToken });

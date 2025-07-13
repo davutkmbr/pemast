@@ -1,6 +1,6 @@
 import { type RunContext, tool } from "@openai/agents";
 import { z } from "zod";
-import { ReminderService } from "../../services/reminder.service.js";
+import { reminderService, ReminderService } from "../../services/reminder.service.js";
 import type { GatewayContext, Reminder } from "../../types/index.js";
 
 /**
@@ -95,8 +95,6 @@ async function searchReminders(
   results: Reminder[];
   searchInfo: string;
 }> {
-  const reminderService = new ReminderService();
-
   // Use the comprehensive search method
   const searchResults = await reminderService.findReminders(
     params.query,

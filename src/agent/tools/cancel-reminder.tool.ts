@@ -1,6 +1,6 @@
 import { type RunContext, tool } from "@openai/agents";
 import { z } from "zod";
-import { ReminderService } from "../../services/reminder.service.js";
+import { reminderService, ReminderService } from "../../services/reminder.service.js";
 import type { GatewayContext } from "../../types/index.js";
 
 /**
@@ -22,8 +22,6 @@ async function cancelReminder(
   params: CancelReminderParams,
   context: GatewayContext,
 ): Promise<{ success: boolean; message: string }> {
-  const reminderService = new ReminderService();
-
   try {
     // First check if reminder exists and belongs to user
     const searchResults = await reminderService.findReminders(

@@ -13,6 +13,10 @@ export interface ImageFile {
   size: number | undefined;
 }
 
+export interface FileMetadata {
+  caption?: string | undefined;
+}
+
 // Zod schema for structured output validation
 const PhotoAnalysisSchema = z.object({
   contentType: z

@@ -1,16 +1,16 @@
-import { MessageService } from "./message.service.js";
-import { UserService } from "./user.service.js";
-import { ProjectService } from "./project.service.js";
-import { ChannelService } from "./channel.service.js";
-import { MemoryService } from "./memory.service.js";
 import type {
-  ProcessedMessage,
+  CreateMemoryInput,
   DatabaseContext,
   GatewayType,
-  UserContext,
   MessageProcessingResult,
-  CreateMemoryInput,
+  ProcessedMessage,
+  UserContext,
 } from "../types/index.js";
+import { ChannelService } from "./channel.service.js";
+import { MemoryService } from "./memory.service.js";
+import { MessageService } from "./message.service.js";
+import { ProjectService } from "./project.service.js";
+import { UserService } from "./user.service.js";
 
 /**
  * Generic message processing service that handles the complete pipeline:
@@ -162,9 +162,14 @@ export class MessageProcessingService {
   private buildMemoryContent(message: ProcessedMessage, metadata: any): string {
     const parts: string[] = [];
 
-    // Add original message content
+    // Add analyzed photo summary
     if (message.content && message.content !== "[Photo analyzed]") {
       parts.push(`Content: ${message.content}`);
+    }
+
+    // Add original caption
+    if (message.processingMetadata?.originalCaption) {
+      parts.push(`Original Caption: ${message.processingMetadata.originalCaption}`);
     }
 
     // Add extracted text (OCR, document parsing)

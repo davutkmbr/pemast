@@ -1,6 +1,11 @@
-import type { FileReference, ProcessedMessage } from "../types/index.js";
-import type { FileType, GatewayType, MessageType } from "../types/index.js";
 import { FileService } from "../services/file.service.js";
+import type {
+  FileReference,
+  FileType,
+  GatewayType,
+  MessageType,
+  ProcessedMessage,
+} from "../types/index.js";
 
 /**
  * Generic file processing pipeline

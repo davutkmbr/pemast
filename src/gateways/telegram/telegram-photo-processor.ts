@@ -1,16 +1,12 @@
 import type { Context } from "telegraf";
-import type { MessageProcessor } from "../types.js";
-import type { ProcessedMessage, FileReference } from "../../types/index.js";
-import {
-  PhotoProcessor,
-  type ImageFile,
-  type PhotoResult,
-} from "../../processors/photo.processor.js";
-import { TelegramFileDownloader } from "./telegram-file-downloader.js";
 import {
   CoreFileProcessorPipeline,
   type FileProcessorPipeline,
 } from "../../core/file-processor-pipeline.js";
+import type { ImageFile, PhotoProcessor, PhotoResult } from "../../processors/photo.processor.js";
+import type { FileReference, ProcessedMessage } from "../../types/index.js";
+import type { MessageProcessor } from "../types.js";
+import { TelegramFileDownloader } from "./telegram-file-downloader.js";
 
 export interface TelegramPhotoProcessorConfig {
   photoProcessor: PhotoProcessor;
@@ -44,7 +40,7 @@ class TelegramPhotoPipeline implements FileProcessorPipeline<ImageFile, PhotoRes
     originalCaption?: string,
   ): ProcessedMessage {
     return {
-      content: result.summary || originalCaption || "[Photo analyzed]",
+      content: result.summary || "[Photo analyzed]",
       messageType: "photo",
       gatewayType: "telegram",
       gatewayMessageId,

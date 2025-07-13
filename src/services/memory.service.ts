@@ -573,13 +573,7 @@ export class MemoryService {
         })
         .slice(0, limit);
 
-      console.log(`Found memories for "${query}":`, {
-        semantic: results.semantic.length,
-        text: results.text.length,
-        tags: results.tags.length,
-        combined: results.combined.length,
-        tagWords: queryWords,
-      });
+      console.log(`Found memories for "${query}": ${results.combined.length}`);
 
       return results;
     } catch (error) {

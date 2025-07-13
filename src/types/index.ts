@@ -28,6 +28,7 @@ export interface DatabaseContext {
 export interface GatewayContext extends DatabaseContext {
   gateway: BaseGateway;
   replyGenerator: ReplyGenerator;
+  messageId: string;
   originalContext?: any; // Platform-specific context (e.g. Telegram Context)
 }
 

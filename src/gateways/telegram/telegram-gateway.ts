@@ -233,6 +233,7 @@ export class TelegramGateway extends BaseGateway {
         ...result.context,
         gateway: this,
         originalContext: ctx,
+        messageId: result.messageId,
         replyGenerator,
       };
 

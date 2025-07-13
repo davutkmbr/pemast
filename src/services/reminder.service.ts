@@ -1,20 +1,27 @@
-import { eq, and, lte, gt, or, ilike, sql } from "drizzle-orm";
+import { and, eq, gt, ilike, lte, or, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { reminders } from "../db/schema.js";
-import { embeddingService } from "./embedding.service.js";
-import { vectorSearch } from "../utils/vector-search.js";
 import type {
   CreateReminderInput,
   DatabaseContext,
-  Reminder,
   RecurrenceType,
+  Reminder,
   VectorSearchResult,
 } from "../types/index.js";
+import { vectorSearch } from "../utils/vector-search.js";
+import { embeddingService } from "./embedding.service.js";
+import { NotificationService } from "./notification.service.js";
 
 /**
  * Service for managing reminders and recurring reminder logic
  */
 export class ReminderService {
+  private notificationService: NotificationService;
+
+  constructor() {
+    this.notificationService = new NotificationService();
+  }
+
   /**
    * Create a new reminder (one-time or recurring) with semantic search support
    */
@@ -55,12 +62,9 @@ export class ReminderService {
 
       console.log(`Created ${isRecurring ? "recurring" : "one-time"} reminder:`, {
         id: savedReminder.id,
-        content: input.content,
         summary: input.summary,
-        tags: input.tags,
         scheduledFor: input.scheduledFor,
         recurrence: input.recurrence,
-        hasEmbedding: embedding.length > 0,
       });
 
       return savedReminder.id;
@@ -510,6 +514,8 @@ export class ReminderService {
     completed: number;
     rescheduled: number;
     ended: number;
+    notificationsSent: number;
+    notificationsFailed: number;
     errors: string[];
   }> {
     const results = {
@@ -517,6 +523,8 @@ export class ReminderService {
       completed: 0,
       rescheduled: 0,
       ended: 0,
+      notificationsSent: 0,
+      notificationsFailed: 0,
       errors: [] as string[],
     };
 
@@ -527,6 +535,22 @@ export class ReminderService {
 
       for (const reminder of dueReminders) {
         try {
+          // First, try to send the notification
+          const notificationResult =
+            await this.notificationService.sendReminderNotification(reminder);
+
+          if (notificationResult.success) {
+            results.notificationsSent++;
+            console.log(`✅ Notification sent for reminder: ${reminder.content}`);
+          } else {
+            results.notificationsFailed++;
+            console.error(
+              `❌ Failed to send notification for reminder ${reminder.id}:`,
+              notificationResult.error,
+            );
+          }
+
+          // Process the reminder (complete or reschedule)
           const result = await this.processDueReminder(reminder.id);
           results.processed++;
 
@@ -542,10 +566,10 @@ export class ReminderService {
               break;
           }
 
-          // TODO: Send notification to user via gateway
           console.log(`Reminder processed: ${reminder.content}`, {
             action: result.action,
             nextScheduledFor: result.nextScheduledFor,
+            notificationSent: notificationResult.success,
           });
         } catch (error) {
           const errorMsg = `Failed to process reminder ${reminder.id}: ${error instanceof Error ? error.message : "Unknown error"}`;

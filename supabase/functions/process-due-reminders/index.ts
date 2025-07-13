@@ -8,7 +8,7 @@ declare const Deno: {
   };
 };
 
-import { ReminderService } from "../services/reminder.service.js";
+import { ReminderService } from "../../../src/services/reminder.service.js";
 
 // Edge Function handler
 export default async function handler(req: Request): Promise<Response> {
@@ -31,17 +31,26 @@ export default async function handler(req: Request): Promise<Response> {
 
     console.log("✅ Due reminders processing completed:", results);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        timestamp: new Date().toISOString(),
-        results,
-      }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
+    // Enhanced response with notification statistics
+    const responseData = {
+      success: true,
+      timestamp: new Date().toISOString(),
+      summary: {
+        totalProcessed: results.processed,
+        completed: results.completed,
+        rescheduled: results.rescheduled,
+        ended: results.ended,
+        notificationsSent: results.notificationsSent,
+        notificationsFailed: results.notificationsFailed,
+        errors: results.errors.length,
       },
-    );
+      results,
+    };
+
+    return new Response(JSON.stringify(responseData), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
   } catch (error) {
     console.error("❌ Error processing due reminders:", error);
 

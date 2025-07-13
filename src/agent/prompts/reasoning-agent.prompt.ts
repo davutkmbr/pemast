@@ -1,7 +1,7 @@
-import { UserPreferencesService } from "../services/user-preferences.service.js";
-import type { DatabaseContext } from "../types/index.js";
-import { buildSystemPrompt } from "../utils/prompts.js";
-import { stringBuilder } from "../utils/string-builder.js";
+import { UserPreferencesService } from "../../services/user-preferences.service.js";
+import type { DatabaseContext } from "../../types/index.js";
+import { buildSystemPrompt } from "../../utils/prompts.js";
+import { stringBuilder } from "../../utils/string-builder.js";
 
 /**
  * Generate the Reasoning Agent prompt - focused on strategic thinking and coordination

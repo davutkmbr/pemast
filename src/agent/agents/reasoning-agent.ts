@@ -1,21 +1,29 @@
-import { Agent } from "@openai/agents";
-import { z } from "zod";
-import { generateReasoningAgentPrompt } from "../../prompts/reasoning-agent.prompt.js";
+import { Agent, webSearchTool } from "@openai/agents";
 import type { DatabaseContext } from "../../types/index.js";
+import { generateReasoningAgentPrompt } from "../prompts/reasoning-agent.prompt.js";
+import { fileRetrieverTool } from "../tools/file-retriever.tool.js";
+import { searchMemoryTool } from "../tools/search-memory.tool.js";
+import { setUserPreferenceTool } from "../tools/set-user-preference.tool.js";
+import { storeMemoryTool } from "../tools/store-memory.tool.js";
 
 /**
- * Reasoning Agent - Main Coordinator
+ * Reasoning Agent - Optimized Single Agent
  *
- * Purpose: Strategic thinking, planning, and execution coordination
- * Tools: Planning agent + specialized agent tools
+ * Purpose: Strategic thinking, planning, and direct execution
+ * Tools: Planning agent + all direct tools (no intermediate agents)
  *
  * Responsibilities:
  * - Create execution plans for user messages
- * - Execute planned tasks sequentially
+ * - Execute tasks directly using tools
  * - Handle conditional flows and user clarification
- * - Coordinate multiple specialist agents
  * - Maintain conversation context and flow
  * - Synthesize final responses
+ *
+ * OPTIMIZATIONS:
+ * - No agent-to-agent communication overhead
+ * - Single model call for all operations
+ * - Reduced token usage
+ * - Faster execution
  */
 
 export async function createReasoningAgent(context: DatabaseContext) {
@@ -37,67 +45,6 @@ export async function createReasoningAgent(context: DatabaseContext) {
     });
   };
 
-  // Create specialized agents as tools to maintain reasoning agent control
-  const getConversationManagerTool = async () => {
-    const { createConversationManagerAgent } = await import("./conversation-manager-agent.js");
-    const conversationManager = await createConversationManagerAgent(context);
-    return conversationManager.asTool({
-      toolName: "analyze_conversation",
-      toolDescription:
-        "Analyze conversation context and determine appropriate response style (casual chat vs task-focused). Use this to understand how to respond naturally to the user.",
-    });
-  };
-
-  const getMemoryAgentTool = async () => {
-    const { createMemoryAgent } = await import("./memory-agent.js");
-    const memoryAgent = await createMemoryAgent(context);
-    return memoryAgent.asTool({
-      toolName: "manage_memory",
-      toolDescription:
-        "Store or retrieve information from user's memory. Use this when user shares new information or asks about past conversations/data.",
-    });
-  };
-
-  const getValidationAgentTool = async () => {
-    const { createValidationAgent } = await import("./validation-agent.js");
-    const validationAgent = await createValidationAgent(context);
-    return validationAgent.asTool({
-      toolName: "validate_information",
-      toolDescription:
-        "Check for conflicts, contradictions, and consistency issues with new information. Use this before storing important information to avoid conflicts.",
-    });
-  };
-
-  const getFileAgentTool = async () => {
-    const { createFileAgent } = await import("./file-agent.js");
-    const fileAgent = await createFileAgent(context);
-    return fileAgent.asTool({
-      toolName: "manage_files",
-      toolDescription:
-        "Retrieve, search, or manage user files and media. Use this when user asks about files, documents, or uploaded content.",
-    });
-  };
-
-  const getPreferenceAgentTool = async () => {
-    const { createPreferenceAgent } = await import("./preference-agent.js");
-    const preferenceAgent = await createPreferenceAgent(context);
-    return preferenceAgent.asTool({
-      toolName: "manage_preferences",
-      toolDescription:
-        "Handle user preferences and settings changes. Use this when user wants to change language, behavior, or other settings.",
-    });
-  };
-
-  const getWebAgentTool = async () => {
-    const { createWebAgent } = await import("./web-agent.js");
-    const webAgent = await createWebAgent(context);
-    return webAgent.asTool({
-      toolName: "search_web",
-      toolDescription:
-        "Search the internet for real-time information. Use this when user asks about current events, news, or information not in memory.",
-    });
-  };
-
   return new Agent({
     name: "reasoning-agent",
     model,
@@ -116,7 +63,7 @@ For EVERY user message, follow this workflow:
    - Review the plan to understand: task sequence, conditional flows, user clarification points
 
 2. **EXECUTION PHASE**:
-   - Execute tasks sequentially according to the plan
+   - Execute tasks sequentially according to the plan using direct tools
    - Handle conditional tasks based on previous results
    - Stop and ask for user clarification when plan indicates USER_CLARIFICATION_REQUIRED
    - Continue execution after receiving clarification
@@ -140,12 +87,12 @@ For EVERY user message, follow this workflow:
 - Resume from the appropriate step after clarification
 
 ### 📋 TASK EXECUTION MAPPING
-- validate_information → use validate_information tool
-- manage_memory → use manage_memory tool  
-- manage_files → use manage_files tool
-- manage_preferences → use manage_preferences tool
-- search_web → use search_web tool
-- analyze_conversation → use analyze_conversation tool
+- validate_information → use search_memory tool to check for conflicts/ambiguity
+- manage_memory → use search_memory and store_memory tools
+- manage_files → use file_retriever tool
+- manage_preferences → use set_user_preference tool
+- search_web → use web_search tool
+- analyze_conversation → analyze context and determine response style directly
 - USER_CLARIFICATION_REQUIRED → ask user directly
 - FINAL_RESPONSE → synthesize and respond
 
@@ -154,35 +101,92 @@ For EVERY user message, follow this workflow:
 **Example Flow 1: Simple casual chat**
 User: "bugün çok yoruldum"
 1. create_task_plan → Plan: [analyze_conversation, FINAL_RESPONSE]
-2. analyze_conversation → Get casual empathetic style guidance
+2. analyze_conversation → Determine casual empathetic style internally
 3. FINAL_RESPONSE → "off yine mi zor gün geçirdin!"
 
 **Example Flow 2: Complex information with clarification**
 User: "ahmet'in kan grubu a+"
 1. create_task_plan → Plan: [validate_information, USER_CLARIFICATION_REQUIRED, manage_memory, analyze_conversation, FINAL_RESPONSE]
-2. validate_information → "Ambiguous reference to Ahmet"
+2. search_memory → Check for "ahmet" → Find ambiguity
 3. USER_CLARIFICATION_REQUIRED → "Hangi Ahmet'i kastediyorsun? Tam adı nedir?"
 4. [Wait for user response: "Ahmet Tümer - arkadaşım"]
-5. manage_memory → Store blood type info for Ahmet Tümer
-6. analyze_conversation → Get confirmation style
+5. store_memory → Store blood type info for Ahmet Tümer
+6. analyze_conversation → Determine confirmation style internally
 7. FINAL_RESPONSE → "anladım! ahmet tümer'in kan grubunu kaydettim 👍"
+
+**Example Flow 3: File request**
+User: "geçen hafta çektiğim fotoğrafları göster"
+1. create_task_plan → Plan: [manage_files, analyze_conversation, FINAL_RESPONSE]
+2. file_retriever → Search and send photos from last week
+3. analyze_conversation → Determine casual response style
+4. FINAL_RESPONSE → "işte geçen haftanın fotoğrafları! hangi gün çekmiştin bunları?"
+
+**Example Flow 4: Preference change**
+User: "artık ingilizce konuş"
+1. create_task_plan → Plan: [manage_preferences, analyze_conversation, FINAL_RESPONSE]
+2. set_user_preference → Set language to English
+3. analyze_conversation → Determine confirmation style
+4. FINAL_RESPONSE → "Got it! I'll speak English from now on."
+
+**Example Flow 5: Web search**
+User: "istanbul'da hava nasıl?"
+1. create_task_plan → Plan: [search_web, analyze_conversation, FINAL_RESPONSE]
+2. web_search → Get current weather in Istanbul
+3. analyze_conversation → Determine casual response style
+4. FINAL_RESPONSE → "şu an istanbul'da 18°C, hafif bulutlu. dışarı çıkmak için iyi hava!"
+
+### 🛠️ TOOL USAGE GUIDELINES
+
+**search_memory:**
+- Use to find existing information
+- Check for conflicts before storing new info
+- Detect ambiguous references (multiple people with same name)
+- Search broadly first, then narrow down
+
+**store_memory:**
+- Store new information after validation
+- Break complex messages into separate memories
+- Use English for consistency
+- Add appropriate tags for categorization
+
+**file_retriever:**
+- Search for files by content or description
+- Files are automatically sent to user
+- Can search various file types (images, documents, audio, video)
+
+**set_user_preference:**
+- Update user settings and preferences
+- Validate preference values
+- Handle multiple preferences at once
+
+**web_search:**
+- Get real-time information
+- Verify facts and current events
+- Research topics not in memory
+
+**analyze_conversation (internal):**
+- Determine if response should be casual or task-focused
+- Match user's communication style
+- Keep responses natural and conversational
+- Avoid over-formal language in casual contexts
 
 ### 🎯 KEY PRINCIPLES
 - **Always plan first**: Never execute without understanding the full context
-- **Follow the plan**: Execute tasks in the planned sequence
+- **Follow the plan**: Execute tasks in the planned sequence using direct tools
 - **Handle conditions**: Check and respect conditional logic
 - **User clarification**: Stop and ask when plan requires it
 - **Natural flow**: Keep responses conversational and friendly
-- **Context retention**: Remember conversation context throughout execution`,
-    // Planning agent as first tool, then execution tools
+- **Context retention**: Remember conversation context throughout execution
+- **Efficiency**: Use tools directly without agent intermediaries`,
+
+    // Direct tools - no agent intermediaries
     tools: [
       await getPlanningAgentTool(),
-      await getConversationManagerTool(),
-      await getMemoryAgentTool(),
-      await getValidationAgentTool(),
-      await getFileAgentTool(),
-      await getPreferenceAgentTool(),
-      await getWebAgentTool(),
+      searchMemoryTool,
+      storeMemoryTool,
+      fileRetrieverTool,
+      setUserPreferenceTool,
+      webSearchTool(),
     ],
   });
 }

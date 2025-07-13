@@ -37,7 +37,7 @@ const SingleMemoryParams = z.object({
     .array(z.string())
     .nullish()
     .describe(
-      `Memory tags in ENGLISH. MUST include at least one core category: ${CORE_MEMORY_CATEGORIES.join(", ")}. Add specific descriptive tags. Example: ['personal_info', 'developer', 'turkey']`,
+      `Memory tags in ENGLISH. MUST include at least one core category: ${CORE_MEMORY_CATEGORIES.join(", ")}. Add specific descriptive tags. Example: ['identity', 'name', 'age'] or ['friend', 'profession'] or ['preference', 'technology']`,
     ),
 });
 

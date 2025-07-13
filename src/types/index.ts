@@ -182,20 +182,47 @@ export interface VectorSearchResult<T> {
  * All memories must include at least one of these categories
  */
 export const CORE_MEMORY_CATEGORIES = [
-  "personal_info", // Personal information, identity details
-  "work", // Work, career, professional information
+  // === USER IDENTITY & PERSONAL ===
+  "identity", // Basic demographic info: name, age, gender, birth date, nationality
+  "personal_info", // Other personal characteristics: personality, lifestyle, experiences
   "preference", // Preferences, likes/dislikes
   "skill", // Skills, abilities, expertise
+  "goal", // Goals, plans, objectives
+
+  // === WORK & PROJECTS ===
+  "work", // Work, career, professional information
   "project", // Projects, tasks, work items
+  "education", // Education, learning information
+
+  // === RELATIONSHIPS ===
+  "family", // Family members and relationships
+  "friend", // Friends and friendships
+  "colleague", // Work colleagues and professional relationships
+
+  // === LIFE CATEGORIES ===
   "contact", // Contact information, addresses
   "location", // Address, location information
   "health", // Health-related information
   "finance", // Financial, money-related information
-  "family", // Family, close relationships
-  "education", // Education, learning information
   "hobby", // Hobbies, interests
-  "goal", // Goals, plans, objectives
   "knowledge", // General knowledge, facts
+
+  // === TEMPORAL CONTEXT ===
+  "current", // Current status/situation
+  "history", // Past experiences/events
+  "future", // Future plans/intentions
+
+  // === IMPORTANCE & ACTION ===
+  "important", // Important information (higher priority)
+  "critical", // Critical information (highest priority)
+  "todo", // Tasks to be completed
+  "completed", // Completed tasks/goals
+
+  // === EMOTIONAL CONTEXT ===
+  "positive", // Positive experiences/feelings
+  "negative", // Negative experiences/feelings
+
+  // === GENERAL ===
   "note", // General notes, miscellaneous
 ] as const;
 

@@ -19,6 +19,36 @@ POSSIBLE OUTCOMES:
 - 🔄 **Updated**: Existing memory enhanced with new information  
 - ⏭️ **Skipped**: Information already exists in similar form
 
+CATEGORIZATION PRINCIPLES:
+🏷️ **Tags are for CATEGORIES, not specific data:**
+- ✅ Use: ['friend', 'age'] → Content: "Ahmet is 26 years old"
+- ❌ Avoid: ['friend', 'age', 'ahmet', '26'] → Too specific
+
+🔍 **Identity vs Personal Info:**
+- `identity`: Basic demographics (name, age, gender, birth date, nationality)
+- `personal_info`: Other personal traits (personality, lifestyle, experiences)
+
+👥 **Relationship Categories:**
+- `identity`: Only for USER's own basic info
+- `friend`: Information about friends
+- `family`: Information about family members
+- `colleague`: Information about work colleagues
+
+⏰ **Temporal Context:**
+- `current`: Present situation
+- `history`: Past experiences
+- `future`: Future plans
+
+🎯 **Importance & Action:**
+- `critical`: Life-critical information (allergies, medical conditions)
+- `important`: High-priority information (deadlines, key events)
+- `todo`: Tasks to be completed
+- `completed`: Finished tasks/goals
+
+😊 **Emotional Context:**
+- `positive`: Positive experiences/feelings
+- `negative`: Negative experiences/feelings
+
 ARRAY STRUCTURE:
 - Use the `memories` array to store multiple distinct pieces of information
 - Each array item should have a different context or topic
@@ -26,28 +56,104 @@ ARRAY STRUCTURE:
 
 Examples:
 
-Single memory:
+USER'S IDENTITY:
 ```
 memories: [{
-  content: "I am a developer",
-  tags: ['personal_info', 'developer']
+  content: "My name is Davut Kömür and I am 28 years old",
+  tags: ['identity', 'name', 'age']
 }]
 ```
 
-Multiple contexts in one call:
+PERSONAL CHARACTERISTICS:
+```
+memories: [{
+  content: "I am an introverted person who prefers working alone",
+  tags: ['personal_info', 'personality']
+}]
+```
+
+RELATIONSHIP INFORMATION:
 ```
 memories: [
   {
-    content: "I work as a software developer at a tech company",
-    tags: ['personal_info', 'work', 'developer']
+    content: "My friend Ahmet is 26 years old and works as a designer",
+    tags: ['friend', 'age', 'profession']
   },
   {
-    content: "My favorite programming language is TypeScript",
-    tags: ['preference', 'programming', 'typescript']
+    content: "My sister Ayşe is a doctor in Ankara",
+    tags: ['family', 'profession', 'location']
   },
   {
-    content: "I live in Istanbul, Turkey",
-    tags: ['personal_info', 'location', 'istanbul', 'turkey']
+    content: "My colleague Mehmet leads the backend team",
+    tags: ['colleague', 'work', 'leadership']
+  }
+]
+```
+
+TEMPORAL CONTEXT:
+```
+memories: [
+  {
+    content: "I currently work as a senior developer at a tech company",
+    tags: ['work', 'current', 'profession']
+  },
+  {
+    content: "I used to work at Microsoft for 3 years",
+    tags: ['work', 'history', 'experience']
+  },
+  {
+    content: "I plan to start my own company next year",
+    tags: ['goal', 'future', 'business']
+  }
+]
+```
+
+IMPORTANCE & ACTION:
+```
+memories: [
+  {
+    content: "I am allergic to peanuts and must avoid them",
+    tags: ['health', 'critical', 'allergy']
+  },
+  {
+    content: "My passport expires next month",
+    tags: ['important', 'document', 'deadline']
+  },
+  {
+    content: "I need to renew my driver's license",
+    tags: ['todo', 'document']
+  },
+  {
+    content: "I completed the React certification course",
+    tags: ['completed', 'education', 'skill']
+  }
+]
+```
+
+EMOTIONAL CONTEXT:
+```
+memories: [
+  {
+    content: "I love my new apartment in the city center",
+    tags: ['location', 'positive', 'residence']
+  },
+  {
+    content: "I hate early morning meetings",
+    tags: ['work', 'negative', 'preference']
+  }
+]
+```
+
+PREFERENCES:
+```
+memories: [
+  {
+    content: "I prefer TypeScript over JavaScript for large projects",
+    tags: ['preference', 'programming', 'technology']
+  },
+  {
+    content: "I like working from home rather than the office",
+    tags: ['preference', 'work']
   }
 ]
 ```
@@ -56,6 +162,9 @@ Smart Update Example:
 If user previously said "I like JavaScript" and now says "I prefer TypeScript over JavaScript", the system might UPDATE the existing preference memory rather than create a duplicate.
 
 Translation examples:
-- User says "Ben geliştiriciyim ve TypeScript severim" → separate into:
-  1. content="I am a developer", tags=['personal_info', 'developer']
-  2. content="I like TypeScript", tags=['preference', 'programming', 'typescript']
+- User says "Ben geliştiriciyim ve 28 yaşındayım" → separate into:
+  1. content="I am a developer", tags=['personal_info', 'profession']
+  2. content="I am 28 years old", tags=['identity', 'age']
+  
+- User says "Arkadaşım Ahmet 26 yaşında" → 
+  content="My friend Ahmet is 26 years old", tags=['friend', 'age']

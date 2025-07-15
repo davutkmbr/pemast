@@ -4,15 +4,15 @@ apps:
     args: start
     interpreter: none
     exec_mode: fork
-    cwd: /Users/davut/Code/docative/pemast
+    cwd: /home/pemast/pemast-cli
     env:
       NODE_ENV: production
     autorestart: true
     watch: false
     max_restarts: 10
     restart_delay: 3000
-    out_file: /Users/davut/Code/docative/pemast/logs/bot-out.log
-    error_file: /Users/davut/Code/docative/pemast/logs/bot-err.log
+    out_file: /home/pemast/logs/bot-out.log
+    error_file: /home/pemast/logs/bot-err.log
     merge_logs: true
 
   - name: pemast-cron
@@ -20,13 +20,13 @@ apps:
     args: src/cron-worker.ts
     interpreter: none
     exec_mode: fork
-    cwd: /Users/davut/Code/docative/pemast
+    cwd: /home/pemast/pemast-cli
     env:
       NODE_ENV: production
     autorestart: true
     watch: false
     max_restarts: 10
     restart_delay: 3000
-    out_file: /Users/davut/Code/docative/pemast/logs/cron-out.log
-    error_file: /Users/davut/Code/docative/pemast/logs/cron-err.log
+    out_file: /home/pemast/logs/cron-out.log
+    error_file: /home/pemast/logs/cron-err.log
     merge_logs: true

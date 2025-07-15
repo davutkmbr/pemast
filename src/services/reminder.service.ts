@@ -570,7 +570,6 @@ export class ReminderService {
         }
       }
 
-      console.log("Due reminders processing complete:", results);
       return results;
     } catch (error) {
       const errorMsg = `Failed to process due reminders: ${error instanceof Error ? error.message : "Unknown error"}`;

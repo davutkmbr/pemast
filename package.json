@@ -6,8 +6,11 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:cron": "tsx watch src/cron-worker.ts",
     "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outdir=dist",
+    "build:cron": "esbuild src/cron-worker.ts --bundle --platform=node --format=esm --outdir=dist",
     "start": "node dist/index.js",
+    "start:cron": "node dist/cron-worker.js",
     "lint": "biome check .",
     "format": "biome format . --write --max-diagnostics 100",
     "test": "node --test"

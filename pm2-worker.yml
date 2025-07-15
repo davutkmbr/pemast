@@ -16,8 +16,8 @@ apps:
     merge_logs: true
 
   - name: pemast-cron
-    script: tsx
-    args: src/cron-worker.ts
+    script: node
+    args: dist/cron-worker.js
     interpreter: none
     exec_mode: fork
     cwd: /home/pemast/pemast-cli

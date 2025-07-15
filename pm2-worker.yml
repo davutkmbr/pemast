@@ -1,0 +1,15 @@
+apps:
+  - name: cli-worker
+    script: pnpm
+    args: start
+    interpreter: bash
+    cwd: /home/pemast/pemast-cli
+    env:
+      NODE_ENV: production
+    autorestart: true
+    watch: false
+    max_restarts: 10
+    restart_delay: 3000
+    out_file: /home/pemast/logs/cli-worker-out.log
+    error_file: /home/pemast/logs/cli-worker-err.log
+    merge_logs: true

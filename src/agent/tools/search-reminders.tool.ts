@@ -1,7 +1,8 @@
 import { type RunContext, tool } from "@openai/agents";
 import { z } from "zod";
-import { reminderService, ReminderService } from "../../services/reminder.service.js";
+import { reminderService } from "../../services/reminder.service.js";
 import type { GatewayContext, Reminder } from "../../types/index.js";
+import { formatDate, formatRecurrence, getStatusInfo } from "../utils/date.utils.js";
 
 /**
  * Tool: search_reminders
@@ -19,58 +20,6 @@ const SearchRemindersParams = z.object({
 });
 
 export type SearchRemindersParams = z.infer<typeof SearchRemindersParams>;
-
-/**
- * Format date for display
- */
-function formatDate(date: Date): string {
-  return date.toLocaleString("tr-TR", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-/**
- * Format recurrence info
- */
-function formatRecurrence(reminder: Reminder): string {
-  if (!reminder.isRecurring || reminder.recurrenceType === "none" || !reminder.recurrenceType) {
-    return "One-time";
-  }
-
-  const interval = reminder.recurrenceInterval || 1;
-  const intervalText = interval === 1 ? "" : `${interval} `;
-  const typeText =
-    {
-      daily: "günde",
-      weekly: "haftada",
-      monthly: "ayda",
-      yearly: "yılda",
-    }[reminder.recurrenceType] || "";
-
-  return `Her ${intervalText}${typeText}`;
-}
-
-/**
- * Get status emoji and text
- */
-function getStatusInfo(reminder: Reminder): { emoji: string; text: string } {
-  if (reminder.isCompleted) {
-    return { emoji: "✅", text: "Completed" };
-  }
-
-  const now = new Date();
-  const scheduled = new Date(reminder.scheduledFor);
-
-  if (scheduled <= now) {
-    return { emoji: "🔔", text: "Due now" };
-  }
-
-  return { emoji: "⏰", text: "Scheduled" };
-}
 
 /**
  * Format a single reminder for display

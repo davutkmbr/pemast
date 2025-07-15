@@ -2,6 +2,12 @@ import { type RunContext, tool } from "@openai/agents";
 import { z } from "zod";
 import { reminderService } from "../../services/reminder.service.js";
 import type { CreateReminderInput, GatewayContext, RecurrenceType } from "../../types/index.js";
+import {
+  formatDate,
+  generateRecurrenceDescription,
+  getNextOccurrence,
+  parseDateTime,
+} from "../utils/date.utils.js";
 
 /**
  * Tool: create_reminder
@@ -33,119 +39,6 @@ const CreateReminderParams = z.object({
 
 export type RecurrenceSchema = z.infer<typeof RecurrenceSchema>;
 export type CreateReminderParamsSchema = z.infer<typeof CreateReminderParams>;
-
-/**
- * Parse and validate datetime string
- */
-function parseDateTime(dateTimeStr: string): Date {
-  const date = new Date(dateTimeStr);
-  if (Number.isNaN(date.getTime())) {
-    throw new Error(`Invalid date format: ${dateTimeStr}`);
-  }
-  return date;
-}
-
-/**
- * Calculate next occurrence of a date (for recurring events)
- */
-function getNextOccurrence(
-  date: Date,
-  recurrenceType?: RecurrenceType,
-  interval: number = 1,
-): Date {
-  const now = new Date();
-  const nextOccurrence = new Date(date);
-
-  // If date is in the future and no recurrence, return as is
-  if (date > now && !recurrenceType) {
-    return nextOccurrence;
-  }
-
-  // Handle different recurrence types
-  switch (recurrenceType) {
-    case "daily":
-      // Find next daily occurrence
-      while (nextOccurrence <= now) {
-        nextOccurrence.setDate(nextOccurrence.getDate() + interval);
-      }
-      break;
-
-    case "weekly":
-      // Find next weekly occurrence
-      while (nextOccurrence <= now) {
-        nextOccurrence.setDate(nextOccurrence.getDate() + 7 * interval);
-      }
-      break;
-
-    case "monthly":
-      // Find next monthly occurrence
-      while (nextOccurrence <= now) {
-        nextOccurrence.setMonth(nextOccurrence.getMonth() + interval);
-      }
-      break;
-
-    case "yearly": {
-      // Find next yearly occurrence
-      const currentYear = now.getFullYear();
-      nextOccurrence.setFullYear(currentYear);
-
-      // If this year's occurrence has passed, move to next year(s)
-      while (nextOccurrence <= now) {
-        nextOccurrence.setFullYear(nextOccurrence.getFullYear() + interval);
-      }
-      break;
-    }
-
-    case "none":
-    default:
-      // For non-recurring events, if date is in the past, it's an error
-      if (nextOccurrence <= now) {
-        throw new Error("Non-recurring reminder cannot be scheduled for the past");
-      }
-      break;
-  }
-
-  return nextOccurrence;
-}
-
-/**
- * Format date for display
- */
-function formatDate(date: Date): string {
-  return date.toLocaleString("tr-TR", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-/**
- * Generate recurrence description
- */
-function generateRecurrenceDescription(recurrence?: RecurrenceSchema | null): string {
-  if (!recurrence || recurrence.type === "none") {
-    return "One-time reminder";
-  }
-
-  const intervalText = recurrence.interval === 1 ? "" : `${recurrence.interval} `;
-  const typeText = {
-    daily: "günde",
-    weekly: "haftada",
-    monthly: "ayda",
-    yearly: "yılda",
-  }[recurrence.type];
-
-  let description = `Her ${intervalText}${typeText} tekrar eder`;
-
-  if (recurrence.endDate) {
-    const endDate = new Date(recurrence.endDate);
-    description += ` (${formatDate(endDate)} tarihine kadar)`;
-  }
-
-  return description;
-}
 
 /**
  * Process reminder creation
@@ -202,7 +95,7 @@ async function createReminder(
  */
 function generateSuccessResponse(params: CreateReminderParamsSchema, reminderId: string): string {
   const scheduledDate = new Date(params.scheduledFor);
-  const recurrenceDesc = generateRecurrenceDescription(params.recurrence);
+  const recurrenceDesc = generateRecurrenceDescription(params.recurrence ?? undefined);
 
   return `✅ **Reminder Created Successfully**
 
@@ -249,6 +142,10 @@ The tool validates dates and automatically calculates future occurrences for all
   parameters: CreateReminderParams,
   // strict: true,
   execute: async (data: CreateReminderParamsSchema, runContext?: RunContext<GatewayContext>) => {
+    console.log({
+      dateRaw: data.scheduledFor,
+    });
+
     const context = runContext?.context;
     if (!context) {
       return "⚠️ Missing database context; cannot create reminder.";

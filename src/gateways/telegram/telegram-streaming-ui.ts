@@ -62,7 +62,9 @@ export class TelegramStreamingUI implements StreamingUI {
   async onToolStart(toolName: string): Promise<void> {
     console.log("🔧 Running tool *", toolName, "*…");
 
-    if (toolName !== "analyze_conversation") {
+    const hiddenTools = ["analyze_conversation", "create_task_plan"];
+
+    if (!hiddenTools.includes(toolName)) {
       await this.sendMessage(`🔧 Running tool *${toolName}*…`);
     }
 

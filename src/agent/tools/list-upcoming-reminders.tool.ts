@@ -1,7 +1,13 @@
 import { type RunContext, tool } from "@openai/agents";
 import { z } from "zod";
-import { reminderService, ReminderService } from "../../services/reminder.service.js";
+import { ReminderService, reminderService } from "../../services/reminder.service.js";
 import type { GatewayContext, Reminder } from "../../types/index.js";
+import {
+  formatDate,
+  formatRecurrence,
+  getTimeUntil,
+  groupRemindersByTime,
+} from "../utils/date.utils.js";
 
 /**
  * Tool: list_upcoming_reminders
@@ -29,64 +35,6 @@ const ListUpcomingRemindersParams = z.object({
 export type ListUpcomingRemindersParams = z.infer<typeof ListUpcomingRemindersParams>;
 
 /**
- * Format date for display
- */
-function formatDate(date: Date): string {
-  return date.toLocaleString("tr-TR", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-/**
- * Get time until reminder
- */
-function getTimeUntil(date: Date): string {
-  const now = new Date();
-  const timeDiff = date.getTime() - now.getTime();
-
-  if (timeDiff <= 0) {
-    return "Due now";
-  }
-
-  const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
-
-  if (days > 0) {
-    return `${days} gün`;
-  } else if (hours > 0) {
-    return `${hours} saat`;
-  } else {
-    return `${minutes} dakika`;
-  }
-}
-
-/**
- * Format recurrence info
- */
-function formatRecurrence(reminder: Reminder): string {
-  if (!reminder.isRecurring || reminder.recurrenceType === "none" || !reminder.recurrenceType) {
-    return "One-time";
-  }
-
-  const interval = reminder.recurrenceInterval || 1;
-  const intervalText = interval === 1 ? "" : `${interval} `;
-  const typeText =
-    {
-      daily: "günde",
-      weekly: "haftada",
-      monthly: "ayda",
-      yearly: "yılda",
-    }[reminder.recurrenceType] || "";
-
-  return `Her ${intervalText}${typeText}`;
-}
-
-/**
  * Format a single reminder for display
  */
 function formatReminder(reminder: Reminder, index: number): string {
@@ -102,55 +50,6 @@ function formatReminder(reminder: Reminder, index: number): string {
    📅 ${formattedDate} (${timeUntil})
    🔄 ${recurrenceInfo}${tags}
    🆔 ID: ${reminder.id}`;
-}
-
-/**
- * Group reminders by time categories
- */
-function groupRemindersByTime(reminders: Reminder[]): {
-  overdue: Reminder[];
-  today: Reminder[];
-  tomorrow: Reminder[];
-  thisWeek: Reminder[];
-  later: Reminder[];
-} {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const nextWeek = new Date(today);
-  nextWeek.setDate(nextWeek.getDate() + 7);
-
-  const groups = {
-    overdue: [] as Reminder[],
-    today: [] as Reminder[],
-    tomorrow: [] as Reminder[],
-    thisWeek: [] as Reminder[],
-    later: [] as Reminder[],
-  };
-
-  reminders.forEach((reminder) => {
-    const reminderDate = new Date(reminder.scheduledFor);
-    const reminderDay = new Date(
-      reminderDate.getFullYear(),
-      reminderDate.getMonth(),
-      reminderDate.getDate(),
-    );
-
-    if (reminderDate < now) {
-      groups.overdue.push(reminder);
-    } else if (reminderDay.getTime() === today.getTime()) {
-      groups.today.push(reminder);
-    } else if (reminderDay.getTime() === tomorrow.getTime()) {
-      groups.tomorrow.push(reminder);
-    } else if (reminderDate < nextWeek) {
-      groups.thisWeek.push(reminder);
-    } else {
-      groups.later.push(reminder);
-    }
-  });
-
-  return groups;
 }
 
 /**

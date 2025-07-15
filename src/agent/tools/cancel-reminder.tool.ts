@@ -1,7 +1,8 @@
 import { type RunContext, tool } from "@openai/agents";
 import { z } from "zod";
-import { reminderService, ReminderService } from "../../services/reminder.service.js";
+import { ReminderService, reminderService } from "../../services/reminder.service.js";
 import type { GatewayContext } from "../../types/index.js";
+import { formatDate } from "../utils/date.utils.js";
 
 /**
  * Tool: cancel_reminder
@@ -49,7 +50,7 @@ The reminder may have been already canceled or doesn't belong to you.`,
         success: false,
         message: `⚠️ **Already canceled**
 
-This reminder was already completed/canceled on ${reminder.completedAt ? new Date(reminder.completedAt).toLocaleString("tr-TR") : "unknown date"}.`,
+This reminder was already completed/canceled on ${reminder.completedAt ? formatDate(new Date(reminder.completedAt)) : "unknown date"}.`,
       };
     }
 
@@ -63,7 +64,7 @@ This reminder was already completed/canceled on ${reminder.completedAt ? new Dat
       message: `✅ **Reminder canceled successfully**
 
 📋 **Canceled reminder:** ${reminder.content}
-⏰ **Was scheduled for:** ${new Date(reminder.scheduledFor).toLocaleString("tr-TR")}
+⏰ **Was scheduled for:** ${formatDate(new Date(reminder.scheduledFor))}
 🔄 **Recurrence:** ${reminder.isRecurring ? "Yes" : "No"}${reasonText}
 
 The reminder has been marked as completed and will not trigger.`,

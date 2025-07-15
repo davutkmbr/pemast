@@ -6,7 +6,6 @@ import {
   pgEnum,
   pgTable,
   primaryKey,
-  real,
   text,
   timestamp,
   uuid,
@@ -55,6 +54,7 @@ export const users = pgTable("users", {
   externalId: text("external_id"), // Gateway-specific user ID
   displayName: text("display_name"),
   email: text("email"),
+  timezone: text("timezone"),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
